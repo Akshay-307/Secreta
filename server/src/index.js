@@ -17,10 +17,20 @@ import messagesRoutes from './routes/messages.js';
 const app = express();
 const httpServer = createServer(app);
 
+// Helper to parse multiple allowed origins
+const getAllowedOrigins = () => {
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    return clientUrl.includes(',')
+        ? clientUrl.split(',').map(url => url.trim())
+        : clientUrl;
+};
+
+const allowedOrigins = getAllowedOrigins();
+
 // Socket.IO setup with CORS
 const io = new Server(httpServer, {
     cors: {
-        origin: process.env.CLIENT_URL || 'http://localhost:5173',
+        origin: allowedOrigins,
         methods: ['GET', 'POST'],
         credentials: true
     }
@@ -28,7 +38,7 @@ const io = new Server(httpServer, {
 
 // Middleware
 app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: allowedOrigins,
     credentials: true
 }));
 app.use(express.json());
