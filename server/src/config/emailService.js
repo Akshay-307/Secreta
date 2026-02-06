@@ -15,8 +15,11 @@ const transporter = nodemailer.createTransport({
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
-    }
-});
+    },
+    // Timeout settings to prevent hanging (10 seconds)
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000
 
 /**
  * Send verification email to new user
@@ -67,7 +70,7 @@ export async function sendVerificationEmail(email, username, token) {
         await transporter.sendMail(mailOptions);
         console.log(`✓ Verification email sent to ${email}`);
         return true;
-    } catch (error) {
+    } catch(error) {
         console.error('✗ Failed to send verification email:', error.message);
         return false;
     }
