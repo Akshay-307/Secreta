@@ -1,0 +1,188 @@
+/**
+ * Chat Page - Frosted Glass Theme
+ */
+
+.chat-page {
+    height: 100vh;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Animated background */
+.chat-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse at 0% 0%, rgba(102, 126, 234, 0.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 100% 100%, rgba(118, 75, 162, 0.12) 0%, transparent 50%);
+    z-index: 0;
+    animation: bgPulse 20s ease-in-out infinite alternate;
+}
+
+@keyframes bgPulse {
+    0% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.6;
+    }
+}
+
+/* Sidebar */
+.chat-sidebar {
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    position: relative;
+    z-index: 1;
+}
+
+.sidebar-header {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.sidebar-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.sidebar-title span {
+    font-size: 1.5rem;
+}
+
+.sidebar-title h1 {
+    font-size: 1.375rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #fff 0%, #a1a1aa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.sidebar-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.icon-button {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+    font-size: 1.125rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.icon-button:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+.icon-button.has-badge::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
+    background: var(--error);
+    border-radius: 50%;
+    border: 2px solid var(--bg-dark);
+}
+
+.profile-button {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.profile-button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+/* Main chat area */
+.chat-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+}
+
+.chat-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 2rem;
+}
+
+.chat-empty-icon {
+    font-size: 5rem;
+    margin-bottom: 1.5rem;
+    opacity: 0.5;
+}
+
+.chat-empty h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.chat-empty p {
+    font-size: 0.9375rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .chat-sidebar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 10;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+
+    .chat-sidebar.open {
+        transform: translateX(0);
+    }
+
+    .chat-main {
+        width: 100%;
+    }
+}
