@@ -11,7 +11,7 @@
  */
 
 const DB_NAME = 'secreta_keys';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'keystore';
 const KEY_ID = 'identity_keypair';
 
