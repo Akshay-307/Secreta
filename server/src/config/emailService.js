@@ -20,6 +20,7 @@ const transporter = nodemailer.createTransport({
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 10000
+});
 
 /**
  * Send verification email to new user
@@ -70,7 +71,7 @@ export async function sendVerificationEmail(email, username, token) {
         await transporter.sendMail(mailOptions);
         console.log(`✓ Verification email sent to ${email}`);
         return true;
-    } catch(error) {
+    } catch (error) {
         console.error('✗ Failed to send verification email:', error.message);
         return false;
     }
