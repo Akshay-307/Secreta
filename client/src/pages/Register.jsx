@@ -110,7 +110,9 @@ export default function Register() {
         <div className="auth-container">
             <div className="auth-card">
                 <div className="auth-header">
-                    <div className="auth-logo">🔐</div>
+                    <div className="auth-logo">
+                        <img src="/logo.svg" alt="Secreta Logo" style={{ width: '100%', height: '100%' }} />
+                    </div>
                     <h1>Join Secreta</h1>
                     <p>Create your secure account</p>
                 </div>

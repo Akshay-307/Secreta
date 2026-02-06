@@ -5,11 +5,30 @@ import mongoose from 'mongoose';
  * 
  * SECURITY NOTES:
  * - Messages are stored ENCRYPTED - server cannot read content
- * - encrypted.ephemeralPublicKey: Used for ECDH key derivation
- * - encrypted.iv: Initialization vector for AES-GCM
- * - encrypted.ciphertext: The encrypted message content
+ * - Each message is encrypted TWICE: once for recipient, once for sender
+ * - This allows both parties to decrypt their own copy of the conversation
  * - Server only relays encrypted blobs between clients
  */
+
+// Sub-schema for encrypted payload
+const encryptedPayloadSchema = new mongoose.Schema({
+    // Ephemeral public key (JWK format) for this message
+    ephemeralPublicKey: {
+        type: Object,
+        required: true
+    },
+    // Initialization vector (Base64 encoded)
+    iv: {
+        type: String,
+        required: true
+    },
+    // Encrypted message content (Base64 encoded)
+    ciphertext: {
+        type: String,
+        required: true
+    }
+}, { _id: false });
+
 const messageSchema = new mongoose.Schema({
     senderId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -24,25 +43,23 @@ const messageSchema = new mongoose.Schema({
         index: true
     },
     /**
-     * Encrypted message payload
-     * All encryption/decryption happens CLIENT-SIDE
+     * Encrypted for recipient (using recipient's public key)
+     * Only the recipient can decrypt this
+     */
+    encryptedForRecipient: encryptedPayloadSchema,
+    /**
+     * Encrypted for sender (using sender's public key)
+     * Only the sender can decrypt this
+     */
+    encryptedForSender: encryptedPayloadSchema,
+    /**
+     * Legacy field for backwards compatibility
+     * @deprecated Use encryptedForRecipient/encryptedForSender instead
      */
     encrypted: {
-        // Sender's ephemeral public key (JWK format) for this message
-        ephemeralPublicKey: {
-            type: Object,
-            required: true
-        },
-        // Initialization vector (Base64 encoded)
-        iv: {
-            type: String,
-            required: true
-        },
-        // Encrypted message content (Base64 encoded)
-        ciphertext: {
-            type: String,
-            required: true
-        }
+        ephemeralPublicKey: Object,
+        iv: String,
+        ciphertext: String
     },
     // Message delivery status
     delivered: {

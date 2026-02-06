@@ -36,7 +36,12 @@ export const setupSocketHandlers = (io) => {
          * Expected payload:
          * {
          *   recipientId: string,
-         *   encrypted: {
+         *   encryptedForRecipient: {
+         *     ephemeralPublicKey: JWK,
+         *     iv: string (base64),
+         *     ciphertext: string (base64)
+         *   },
+         *   encryptedForSender: {
          *     ephemeralPublicKey: JWK,
          *     iv: string (base64),
          *     ciphertext: string (base64)
@@ -45,11 +50,15 @@ export const setupSocketHandlers = (io) => {
          */
         socket.on('send_message', async (data, callback) => {
             try {
-                const { recipientId, encrypted } = data;
+                const { recipientId, encryptedForRecipient, encryptedForSender, encrypted } = data;
+
+                // Support both new dual-encryption and legacy single encryption
+                const forRecipient = encryptedForRecipient || encrypted;
+                const forSender = encryptedForSender;
 
                 // Validate payload
-                if (!recipientId || !encrypted || !encrypted.ephemeralPublicKey ||
-                    !encrypted.iv || !encrypted.ciphertext) {
+                if (!recipientId || !forRecipient || !forRecipient.ephemeralPublicKey ||
+                    !forRecipient.iv || !forRecipient.ciphertext) {
                     return callback({ error: 'Invalid message payload' });
                 }
 
@@ -65,14 +74,25 @@ export const setupSocketHandlers = (io) => {
                     return callback({ error: 'Not friends with this user' });
                 }
 
-                // Save encrypted message
+                // Save encrypted message with both versions
                 const message = new Message({
                     senderId: userId,
                     recipientId,
+                    encryptedForRecipient: {
+                        ephemeralPublicKey: forRecipient.ephemeralPublicKey,
+                        iv: forRecipient.iv,
+                        ciphertext: forRecipient.ciphertext
+                    },
+                    encryptedForSender: forSender ? {
+                        ephemeralPublicKey: forSender.ephemeralPublicKey,
+                        iv: forSender.iv,
+                        ciphertext: forSender.ciphertext
+                    } : null,
+                    // Keep legacy field for backward compatibility
                     encrypted: {
-                        ephemeralPublicKey: encrypted.ephemeralPublicKey,
-                        iv: encrypted.iv,
-                        ciphertext: encrypted.ciphertext
+                        ephemeralPublicKey: forRecipient.ephemeralPublicKey,
+                        iv: forRecipient.iv,
+                        ciphertext: forRecipient.ciphertext
                     }
                 });
 
@@ -83,7 +103,9 @@ export const setupSocketHandlers = (io) => {
                     _id: message._id,
                     senderId: userId,
                     recipientId,
-                    encrypted: message.encrypted,
+                    encryptedForRecipient: message.encryptedForRecipient,
+                    encryptedForSender: message.encryptedForSender,
+                    encrypted: message.encryptedForRecipient, // Legacy support
                     createdAt: message.createdAt,
                     delivered: false,
                     read: false

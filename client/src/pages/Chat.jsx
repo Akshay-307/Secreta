@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 import { getSocket } from '../api/socket';
 import { encryptMessage, decryptMessage } from '../crypto/encryption';
+import { getStoredPublicKeyJwk } from '../crypto/keyManager';
 import ChatList from '../components/ChatList';
 import ChatWindow from '../components/ChatWindow';
 import FriendSearch from '../components/FriendSearch';
@@ -62,7 +63,27 @@ export default function Chat() {
             const decryptedMessages = await Promise.all(
                 response.data.map(async (msg) => {
                     try {
-                        const decryptedContent = await decryptMessage(msg.encrypted);
+                        // Determine if this is a message I sent or received
+                        const isMine = msg.senderId !== friendId;
+
+                        // Use the appropriate encrypted version
+                        // For messages I sent, use encryptedForSender
+                        // For messages I received, use encryptedForRecipient (or legacy encrypted)
+                        let encryptedData;
+                        if (isMine && msg.encryptedForSender) {
+                            encryptedData = msg.encryptedForSender;
+                        } else if (!isMine && msg.encryptedForRecipient) {
+                            encryptedData = msg.encryptedForRecipient;
+                        } else {
+                            // Fallback to legacy encrypted field
+                            encryptedData = msg.encrypted;
+                        }
+
+                        if (!encryptedData || !encryptedData.ephemeralPublicKey) {
+                            return { ...msg, content: '[No encryption data]' };
+                        }
+
+                        const decryptedContent = await decryptMessage(encryptedData);
                         return { ...msg, content: decryptedContent };
                     } catch (error) {
                         console.error('Failed to decrypt message:', error);
@@ -105,12 +126,22 @@ export default function Chat() {
         if (!socket) return;
 
         try {
-            const publicKey = await getFriendPublicKey(selectedFriend.id);
-            const encrypted = await encryptMessage(content, publicKey);
+            // Get both public keys
+            const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
+            const myPublicKey = await getStoredPublicKeyJwk();
+
+            // Encrypt for recipient (so they can read it)
+            const encryptedForRecipient = await encryptMessage(content, recipientPublicKey);
+
+            // Encrypt for self (so we can read our own sent messages later)
+            const encryptedForSender = myPublicKey
+                ? await encryptMessage(content, myPublicKey)
+                : null;
 
             socket.emit('send_message', {
                 recipientId: selectedFriend.id,
-                encrypted
+                encryptedForRecipient,
+                encryptedForSender
             }, (response) => {
                 if (response.error) {
                     console.error('Send failed:', response.error);
@@ -147,7 +178,9 @@ export default function Chat() {
         // New message received
         const handleNewMessage = async (message) => {
             try {
-                const decryptedContent = await decryptMessage(message.encrypted);
+                // Use encryptedForRecipient for incoming messages (or fallback to encrypted)
+                const encryptedData = message.encryptedForRecipient || message.encrypted;
+                const decryptedContent = await decryptMessage(encryptedData);
                 const decryptedMessage = { ...message, content: decryptedContent };
 
                 setMessages(prev => {
