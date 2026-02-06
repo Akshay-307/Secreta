@@ -98,11 +98,21 @@ router.post('/register', async (req, res) => {
         // Send verification email
         const emailSent = await sendVerificationEmail(email, username, verificationToken);
 
+        if (!emailSent) {
+            // FALLBACK: If email service fails (e.g. Render firewall), auto-verify user
+            // so they are not locked out of their own app.
+            console.log('⚠ Email failed to send. Auto-verifying user for deployment capability.');
+            user.isVerified = true;
+            user.verificationToken = null;
+            user.verificationExpires = null;
+            await user.save();
+        }
+
         res.status(201).json({
             message: emailSent
                 ? 'Registration successful! Please check your email to verify your account.'
-                : 'Account created. Email service unavailable - contact admin to verify.',
-            requiresVerification: true,
+                : 'Account created! Email service was unavailable, so we auto-verified you.',
+            requiresVerification: emailSent, // Only require verification if email actually sent
             emailSent
         });
     } catch (error) {
