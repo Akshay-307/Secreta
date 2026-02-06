@@ -327,6 +327,30 @@
   cursor: not-allowed;
 }
 
+.resend-verification-btn {
+  width: 100%;
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 14px;
+  padding: 0.875rem;
+  color: #fde047;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 0.5rem;
+  backdrop-filter: blur(10px);
+}
+
+.resend-verification-btn:hover:not(:disabled) {
+  background: rgba(234, 179, 8, 0.25);
+  transform: translateY(-1px);
+}
+
+.resend-verification-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .verify-actions {
   padding: 1.5rem;
 }

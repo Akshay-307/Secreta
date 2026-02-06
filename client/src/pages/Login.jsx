@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import './Auth.css';
 
@@ -12,6 +13,8 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [resending, setResending] = useState(false);
+    const [showResend, setShowResend] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
 
@@ -24,9 +27,27 @@ export default function Login() {
             await login(email, password);
             navigate('/');
         } catch (err) {
-            setError(err.response?.data?.error || 'Login failed');
+            const errorData = err.response?.data;
+            setError(errorData?.error || 'Login failed');
+
+            if (errorData?.requiresVerification) {
+                setShowResend(true);
+            }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleResend = async () => {
+        setResending(true);
+        try {
+            await api.post('/auth/resend-verification', { email });
+            setError('Verification email sent! Please check your inbox.');
+            setShowResend(false);
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to resend email');
+        } finally {
+            setResending(false);
         }
     };
 
@@ -43,6 +64,17 @@ export default function Login() {
 
                 <form onSubmit={handleSubmit} className="auth-form">
                     {error && <div className="auth-error">{error}</div>}
+
+                    {showResend && (
+                        <button
+                            type="button"
+                            className="resend-verification-btn"
+                            onClick={handleResend}
+                            disabled={resending}
+                        >
+                            {resending ? 'Sending email...' : 'Resend Verification Email'}
+                        </button>
+                    )}
 
                     <div className="form-group">
                         <label htmlFor="email">Email</label>
