@@ -46,15 +46,18 @@ export default function Register() {
             const publicKey = await initializeKeys();
 
             // Register (don't auto-login since email verification required)
-            await api.post('/auth/register', {
+            const response = await api.post('/auth/register', {
                 email,
                 username,
                 password,
                 publicKey
             });
 
-            setRegistered(true);
+            if (response.data.requiresVerification || response.status === 201) {
+                setRegistered(true);
+            }
         } catch (err) {
+            console.error('Registration error:', err);
             setError(err.response?.data?.error || 'Registration failed');
         } finally {
             setLoading(false);

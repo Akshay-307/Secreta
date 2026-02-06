@@ -65,6 +65,12 @@ export function AuthProvider({ children }) {
             publicKey
         });
 
+        // Server requires email verification - don't log in yet
+        if (response.data.requiresVerification) {
+            return response.data;
+        }
+
+        // Fallback for servers allowing direct login (legacy)
         const { user: userData, accessToken, refreshToken } = response.data;
 
         localStorage.setItem('accessToken', accessToken);
