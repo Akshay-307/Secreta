@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { initializeKeys } from '../crypto/keyManager';
 import './Auth.css';
@@ -19,6 +19,7 @@ export default function Register() {
     const [loading, setLoading] = useState(false);
     const [registered, setRegistered] = useState(false);
     const [resending, setResending] = useState(false);
+    const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -45,7 +46,7 @@ export default function Register() {
             // Generate encryption keys
             const publicKey = await initializeKeys();
 
-            // Register (don't auto-login since email verification required)
+            // Register
             const response = await api.post('/auth/register', {
                 email,
                 username,
@@ -53,8 +54,12 @@ export default function Register() {
                 publicKey
             });
 
-            if (response.data.requiresVerification || response.status === 201) {
+            if (response.data.requiresVerification) {
                 setRegistered(true);
+            } else {
+                // Auto-verified (Fail Safe)
+                alert(response.data.message);
+                navigate('/login');
             }
         } catch (err) {
             console.error('Registration error:', err);
