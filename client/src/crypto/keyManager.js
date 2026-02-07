@@ -230,3 +230,130 @@ export async function initializeKeys() {
 
     return exportPublicKey(keyPair.publicKey);
 }
+
+/**
+ * Derive an encryption key from password using PBKDF2
+ * @param {string} password 
+ * @param {Uint8Array} salt 
+ * @returns {Promise<CryptoKey>}
+ */
+async function deriveKeyFromPassword(password, salt) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        enc.encode(password),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+    );
+
+    return crypto.subtle.deriveKey(
+        {
+            name: 'PBKDF2',
+            salt,
+            iterations: 100000,
+            hash: 'SHA-256'
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    );
+}
+
+/**
+ * Export keys as password-protected backup
+ * @param {string} password - User-provided password for encryption
+ * @returns {Promise<string>} - JSON backup string
+ */
+export async function exportKeyBackup(password) {
+    const keyPair = await getStoredKeyPair();
+    if (!keyPair) {
+        throw new Error('No keys to export');
+    }
+
+    // Export both keys as JWK
+    const publicJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+    const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+
+    const data = JSON.stringify({ publicKey: publicJwk, privateKey: privateJwk });
+
+    // Generate salt and IV
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+
+    // Derive encryption key from password
+    const encKey = await deriveKeyFromPassword(password, salt);
+
+    // Encrypt the key data
+    const enc = new TextEncoder();
+    const encrypted = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        encKey,
+        enc.encode(data)
+    );
+
+    // Return base64-encoded backup
+    const backup = {
+        version: 1,
+        salt: btoa(String.fromCharCode(...salt)),
+        iv: btoa(String.fromCharCode(...iv)),
+        data: btoa(String.fromCharCode(...new Uint8Array(encrypted)))
+    };
+
+    return JSON.stringify(backup, null, 2);
+}
+
+/**
+ * Import keys from password-protected backup
+ * @param {string} backupJson - JSON backup string
+ * @param {string} password - Password used during export
+ */
+export async function importKeyBackup(backupJson, password) {
+    const backup = JSON.parse(backupJson);
+
+    if (backup.version !== 1) {
+        throw new Error('Unsupported backup version');
+    }
+
+    // Decode from base64
+    const salt = new Uint8Array([...atob(backup.salt)].map(c => c.charCodeAt(0)));
+    const iv = new Uint8Array([...atob(backup.iv)].map(c => c.charCodeAt(0)));
+    const encryptedData = new Uint8Array([...atob(backup.data)].map(c => c.charCodeAt(0)));
+
+    // Derive decryption key from password
+    const decKey = await deriveKeyFromPassword(password, salt);
+
+    // Decrypt
+    const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        decKey,
+        encryptedData
+    );
+
+    const dec = new TextDecoder();
+    const data = JSON.parse(dec.decode(decrypted));
+
+    // Import the keys
+    const publicKey = await crypto.subtle.importKey(
+        'jwk',
+        data.publicKey,
+        { name: 'ECDH', namedCurve: 'P-256' },
+        true,
+        []
+    );
+
+    const privateKey = await crypto.subtle.importKey(
+        'jwk',
+        data.privateKey,
+        { name: 'ECDH', namedCurve: 'P-256' },
+        true,
+        ['deriveKey', 'deriveBits']
+    );
+
+    // Store the imported keys
+    await storeKeyPair({ publicKey, privateKey });
+
+    console.log('✓ Keys restored from backup');
+    return true;
+}

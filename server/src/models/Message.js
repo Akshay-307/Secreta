@@ -69,7 +69,12 @@ const messageSchema = new mongoose.Schema({
     read: {
         type: Boolean,
         default: false
-    }
+    },
+    // Emoji reactions: array of { emoji: string, userId: ObjectId }
+    reactions: [{
+        emoji: { type: String, required: true },
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+    }]
 }, {
     timestamps: true
 });

@@ -170,6 +170,18 @@ export default function Chat() {
         }
     };
 
+    // Handle emoji reaction
+    const handleReact = (messageId, emoji) => {
+        const socket = getSocket();
+        if (socket && selectedFriend) {
+            socket.emit('add_reaction', {
+                messageId,
+                emoji,
+                recipientId: selectedFriend.id
+            });
+        }
+    };
+
     // Setup socket listeners
     useEffect(() => {
         const socket = getSocket();
@@ -233,16 +245,34 @@ export default function Chat() {
             fetchFriends();
         };
 
+        // Reaction updated - update message reactions
+        const handleReactionUpdated = ({ messageId, reactions }) => {
+            setMessages(prev => prev.map(msg =>
+                msg._id === messageId ? { ...msg, reactions } : msg
+            ));
+        };
+
+        // Messages read - update read status on sender's messages
+        const handleMessagesRead = ({ messageIds }) => {
+            setMessages(prev => prev.map(msg =>
+                messageIds.includes(msg._id) ? { ...msg, read: true } : msg
+            ));
+        };
+
         socket.on('new_message', handleNewMessage);
         socket.on('friend_status', handleFriendStatus);
         socket.on('user_typing', handleUserTyping);
         socket.on('friend_request_accepted', handleFriendRequestAccepted);
+        socket.on('reaction_updated', handleReactionUpdated);
+        socket.on('messages_read', handleMessagesRead);
 
         return () => {
             socket.off('new_message', handleNewMessage);
             socket.off('friend_status', handleFriendStatus);
             socket.off('user_typing', handleUserTyping);
             socket.off('friend_request_accepted', handleFriendRequestAccepted);
+            socket.off('reaction_updated', handleReactionUpdated);
+            socket.off('messages_read', handleMessagesRead);
         };
     }, [selectedFriend, fetchFriends]);
 
@@ -330,6 +360,8 @@ export default function Chat() {
                         isOnline={onlineUsers.has(selectedFriend.id)}
                         onBack={() => setSelectedFriend(null)}
                         showBackButton={isMobileView}
+                        onReact={handleReact}
+                        currentUserId={user?.id}
                     />
                 ) : (
                     <div className="no-chat-selected">

@@ -8,6 +8,24 @@ import { useState, useRef, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
 import './ChatWindow.css';
 
+// Format last seen time as relative string
+function formatLastSeen(lastSeen) {
+    if (!lastSeen) return 'offline';
+
+    const now = new Date();
+    const seen = new Date(lastSeen);
+    const diffMs = now - seen;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return seen.toLocaleDateString();
+}
+
 export default function ChatWindow({
     friend,
     messages,
@@ -16,10 +34,14 @@ export default function ChatWindow({
     isTyping,
     isOnline,
     onBack,
-    showBackButton
+    showBackButton,
+    onReact,
+    currentUserId
 }) {
     const [input, setInput] = useState('');
     const [typingTimeout, setTypingTimeout] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showSearch, setShowSearch] = useState(false);
     const messagesEndRef = useRef(null);
 
     // Auto-scroll to bottom on new messages
@@ -86,14 +108,41 @@ export default function ChatWindow({
                         ) : isOnline ? (
                             <span className="online-status">online</span>
                         ) : (
-                            <span>offline</span>
+                            <span>Last seen {friend.lastSeen ? formatLastSeen(friend.lastSeen) : 'offline'}</span>
                         )}
                     </div>
                 </div>
-                <div className="chat-header-lock" title="End-to-end encrypted">
-                    🔒
+                <div className="chat-header-actions">
+                    <button
+                        className={`search-toggle ${showSearch ? 'active' : ''}`}
+                        onClick={() => { setShowSearch(!showSearch); setSearchQuery(''); }}
+                        title="Search messages"
+                    >
+                        🔍
+                    </button>
+                    <span className="chat-header-lock" title="End-to-end encrypted">
+                        🔒
+                    </span>
                 </div>
             </header>
+
+            {/* Search bar */}
+            {showSearch && (
+                <div className="search-bar">
+                    <input
+                        type="text"
+                        placeholder="Search messages..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        autoFocus
+                    />
+                    {searchQuery && (
+                        <span className="search-count">
+                            {messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase())).length} found
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Messages */}
             <div className="messages-container">
@@ -109,13 +158,18 @@ export default function ChatWindow({
                             <span>🔐</span>
                             Messages are end-to-end encrypted
                         </div>
-                        {messages.map((message, index) => (
-                            <MessageBubble
-                                key={message._id || index}
-                                message={message}
-                                isMine={message.senderId !== friend.id}
-                            />
-                        ))}
+                        {messages
+                            .filter(m => !searchQuery || m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
+                            .map((message, index) => (
+                                <MessageBubble
+                                    key={message._id || index}
+                                    message={message}
+                                    isMine={message.senderId !== friend.id}
+                                    onReact={onReact}
+                                    currentUserId={currentUserId}
+                                    searchQuery={searchQuery}
+                                />
+                            ))}
                     </>
                 )}
                 <div ref={messagesEndRef} />

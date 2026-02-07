@@ -152,6 +152,64 @@ export const setupSocketHandlers = (io) => {
         });
 
         /**
+         * Handle adding emoji reaction to a message
+         */
+        socket.on('add_reaction', async (data, callback) => {
+            const { messageId, emoji, recipientId } = data;
+
+            try {
+                const message = await Message.findById(messageId);
+                if (!message) {
+                    return callback?.({ error: 'Message not found' });
+                }
+
+                // Check if user already reacted with this emoji
+                const existingReaction = message.reactions?.find(
+                    r => r.userId.toString() === userId && r.emoji === emoji
+                );
+
+                if (existingReaction) {
+                    // Remove reaction (toggle off)
+                    message.reactions = message.reactions.filter(
+                        r => !(r.userId.toString() === userId && r.emoji === emoji)
+                    );
+                } else {
+                    // Add reaction
+                    if (!message.reactions) message.reactions = [];
+                    message.reactions.push({ emoji, userId });
+                }
+
+                await message.save();
+
+                const reactionData = {
+                    messageId,
+                    reactions: message.reactions
+                };
+
+                // Notify both users
+                const recipientSockets = userSockets.get(recipientId);
+                if (recipientSockets) {
+                    recipientSockets.forEach(socketId => {
+                        io.to(socketId).emit('reaction_updated', reactionData);
+                    });
+                }
+
+                // Also notify sender's other tabs
+                const senderSockets = userSockets.get(userId);
+                if (senderSockets) {
+                    senderSockets.forEach(socketId => {
+                        io.to(socketId).emit('reaction_updated', reactionData);
+                    });
+                }
+
+                callback?.({ success: true, reactions: message.reactions });
+            } catch (error) {
+                console.error('Add reaction error:', error);
+                callback?.({ error: 'Failed to add reaction' });
+            }
+        });
+
+        /**
          * Handle message read receipt
          */
         socket.on('mark_read', async (data) => {

@@ -109,3 +109,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.status-online {
+    color: var(--success);
+    font-weight: 500;
+}
+
+.status-offline {
+    color: var(--text-muted);
+}
