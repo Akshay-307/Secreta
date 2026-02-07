@@ -19,7 +19,10 @@ const transporter = nodemailer.createTransport({
     // Timeout settings to prevent hanging (10 seconds)
     connectionTimeout: 10000,
     greetingTimeout: 10000,
-    socketTimeout: 10000
+    socketTimeout: 10000,
+    // Force IPv4 as some environments (Render) have issues with IPv6
+    family: 4,
+    dnsResolution: 4 // Force DNS to resolve to IPv4
 });
 
 /**
