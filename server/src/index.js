@@ -13,6 +13,7 @@ import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import friendsRoutes from './routes/friends.js';
 import messagesRoutes from './routes/messages.js';
+import avatarRoutes from './routes/avatar.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -48,6 +49,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/avatar', avatarRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -86,3 +88,6 @@ const startServer = async () => {
 };
 
 startServer().catch(console.error);
+
+// Export io for use in routes (e.g., friend request notifications)
+export { io };

@@ -3,7 +3,8 @@ import Friendship from '../models/Friendship.js';
 import User from '../models/User.js';
 
 // Map of userId -> Set of socket IDs (for multiple tabs/devices)
-const userSockets = new Map();
+// Exported for use in routes (e.g., friend request notifications)
+export const userSockets = new Map();
 
 /**
  * Socket.IO Event Handlers

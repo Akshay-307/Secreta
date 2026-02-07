@@ -72,7 +72,11 @@ export default function ChatWindow({
                     </button>
                 )}
                 <div className="chat-header-avatar">
-                    {friend.username[0].toUpperCase()}
+                    {friend.avatar ? (
+                        <img src={friend.avatar} alt={friend.username} className="avatar-img" />
+                    ) : (
+                        friend.username[0].toUpperCase()
+                    )}
                 </div>
                 <div className="chat-header-info">
                     <div className="chat-header-name">{friend.username}</div>

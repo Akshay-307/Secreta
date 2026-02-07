@@ -228,14 +228,21 @@ export default function Chat() {
             });
         };
 
+        // Friend request accepted - refresh friend list
+        const handleFriendRequestAccepted = () => {
+            fetchFriends();
+        };
+
         socket.on('new_message', handleNewMessage);
         socket.on('friend_status', handleFriendStatus);
         socket.on('user_typing', handleUserTyping);
+        socket.on('friend_request_accepted', handleFriendRequestAccepted);
 
         return () => {
             socket.off('new_message', handleNewMessage);
             socket.off('friend_status', handleFriendStatus);
             socket.off('user_typing', handleUserTyping);
+            socket.off('friend_request_accepted', handleFriendRequestAccepted);
         };
     }, [selectedFriend, fetchFriends]);
 

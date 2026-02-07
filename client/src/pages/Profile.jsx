@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/client';
 import { getAvatar, saveAvatar, processAvatar, deleteAvatar } from '../crypto/avatarManager';
 import './Profile.css';
 
@@ -45,6 +46,8 @@ export default function Profile() {
         try {
             const processed = await processAvatar(file, 200);
             await saveAvatar(processed);
+            // Sync to server so friends can see it
+            await api.put('/avatar', { avatar: processed });
             setAvatar(processed);
             setMessage('Avatar updated!');
         } catch (error) {
@@ -57,6 +60,8 @@ export default function Profile() {
 
     const handleRemoveAvatar = async () => {
         await deleteAvatar();
+        // Remove from server too
+        await api.delete('/avatar').catch(console.error);
         setAvatar(null);
         setMessage('Avatar removed');
     };

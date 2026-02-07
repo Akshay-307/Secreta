@@ -43,6 +43,13 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    /**
+     * Avatar stored as base64 data URL (max ~50KB compressed)
+     */
+    avatar: {
+        type: String,
+        default: null
+    },
     lastSeen: {
         type: Date,
         default: Date.now

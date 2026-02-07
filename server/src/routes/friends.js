@@ -2,6 +2,8 @@ import express from 'express';
 import Friendship from '../models/Friendship.js';
 import User from '../models/User.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { io } from '../index.js';
+import { userSockets } from '../socket/handlers.js';
 
 const router = express.Router();
 
@@ -22,7 +24,7 @@ router.get('/', async (req, res) => {
                 { requester: userId, status: 'accepted' },
                 { recipient: userId, status: 'accepted' }
             ]
-        }).populate('requester recipient', '_id username publicKey lastSeen');
+        }).populate('requester recipient', '_id username publicKey lastSeen avatar');
 
         const friends = friendships.map(f => {
             const friend = f.requester._id.toString() === userId
@@ -33,7 +35,8 @@ router.get('/', async (req, res) => {
                 id: friend._id,
                 username: friend.username,
                 hasPublicKey: !!friend.publicKey,
-                lastSeen: friend.lastSeen
+                lastSeen: friend.lastSeen,
+                avatar: friend.avatar || null
             };
         });
 
@@ -155,6 +158,24 @@ router.put('/accept/:requestId', async (req, res) => {
 
         friendship.status = 'accepted';
         await friendship.save();
+
+        // Get the accepter's (current user's) details to send to requester
+        const accepter = await User.findById(userId).select('_id username avatar');
+
+        // Notify the original requester via socket that their request was accepted
+        const requesterId = friendship.requester._id.toString();
+        const requesterSockets = userSockets.get(requesterId);
+        if (requesterSockets) {
+            const newFriendData = {
+                id: accepter._id,
+                username: accepter.username,
+                avatar: accepter.avatar || null,
+                hasPublicKey: true
+            };
+            requesterSockets.forEach(socketId => {
+                io.to(socketId).emit('friend_request_accepted', { friend: newFriendData });
+            });
+        }
 
         res.json({
             message: 'Friend request accepted',

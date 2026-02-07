@@ -26,7 +26,11 @@ export default function ChatList({ friends, selectedFriend, onSelectFriend, onli
                     onClick={() => onSelectFriend(friend)}
                 >
                     <div className="chat-item-avatar">
-                        {friend.username[0].toUpperCase()}
+                        {friend.avatar ? (
+                            <img src={friend.avatar} alt={friend.username} className="avatar-img" />
+                        ) : (
+                            friend.username[0].toUpperCase()
+                        )}
                         {onlineUsers.has(friend.id) && <span className="online-indicator" />}
                     </div>
                     <div className="chat-item-info">
