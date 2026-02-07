@@ -260,3 +260,16 @@
     background: rgba(239, 68, 68, 0.25);
     box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2);
 }
+
+@media (max-width: 480px) {
+    .modal-overlay {
+        padding: 0.5rem;
+        align-items: flex-end;
+    }
+
+    .modal-content {
+        max-height: 90dvh;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+}

@@ -258,3 +258,8 @@ a {
   -webkit-backdrop-filter: blur(8px);
   z-index: 100;
 }
+
+/* Mobile responsive utility */
+.hidden {
+  display: none !important;
+}
