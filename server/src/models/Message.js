@@ -118,6 +118,10 @@ const messageSchema = new mongoose.Schema({
         type: Number,
         default: null
     },
+    voiceWaveform: {
+        type: [Number],
+        default: []
+    },
     // Disappearing messages support
     isEphemeral: {
         type: Boolean,

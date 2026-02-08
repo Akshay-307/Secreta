@@ -100,7 +100,16 @@ export const setupSocketHandlers = (io) => {
                         ephemeralPublicKey: forRecipient.ephemeralPublicKey,
                         iv: forRecipient.iv,
                         ciphertext: forRecipient.ciphertext
-                    }
+                    },
+
+                    // Message metadata
+                    messageType: data.messageType || 'text',
+                    fileAttachment: data.fileAttachment || null,
+                    voiceDuration: data.voiceDuration || null,
+                    voiceWaveform: data.waveformData || null,
+
+                    // Timestamp
+                    createdAt: new Date()
                 };
 
                 const message = new Message(messageData);
