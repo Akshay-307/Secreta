@@ -85,7 +85,18 @@ export default function Chat() {
                         }
 
                         let decryptedContent = '';
-                        if (!msg.messageType || msg.messageType === 'text') {
+
+                        // Check for legacy placeholder messages (fixes "data too small" errors)
+                        const ciphertext = encryptedData?.ciphertext;
+                        const isPlaceholder = ciphertext === 'FILE' || ciphertext === 'VOICE' || ciphertext === '' || (ciphertext && ciphertext.length < 24);
+
+                        if (!msg.messageType) {
+                            if (isPlaceholder) {
+                                decryptedContent = '📎 Attachment';
+                            } else {
+                                decryptedContent = await decryptMessage(encryptedData);
+                            }
+                        } else if (msg.messageType === 'text') {
                             decryptedContent = await decryptMessage(encryptedData);
                         } else {
                             if (msg.messageType === 'voice') {
@@ -97,6 +108,11 @@ export default function Chat() {
 
                         return { ...msg, content: decryptedContent };
                     } catch (error) {
+                        // Suppress expected errors for legacy/broken messages
+                        if (error.name === 'OperationError' || error.name === 'InvalidCharacterError') {
+                            console.warn('Skipping unreadable message:', msg._id);
+                            return { ...msg, content: '🔒 Unreadable' };
+                        }
                         console.error('Failed to decrypt message:', error);
                         return { ...msg, content: '[Unable to decrypt]' };
                     }
@@ -372,9 +388,19 @@ export default function Chat() {
             try {
                 let decryptedContent = '';
 
+                // Check for legacy placeholder messages
+                const ciphertext = message.encryptedForRecipient?.ciphertext || message.encrypted?.ciphertext;
+                const isPlaceholder = ciphertext === 'FILE' || ciphertext === 'VOICE' || ciphertext === '' || (ciphertext && ciphertext.length < 24);
+
                 // If it's a text message, decrypt content
-                if (!message.messageType || message.messageType === 'text') {
-                    // Use encryptedForRecipient for incoming messages (or fallback to encrypted)
+                if (!message.messageType) {
+                    if (isPlaceholder) {
+                        decryptedContent = '📎 Attachment';
+                    } else {
+                        const encryptedData = message.encryptedForRecipient || message.encrypted;
+                        decryptedContent = await decryptMessage(encryptedData);
+                    }
+                } else if (message.messageType === 'text') {
                     const encryptedData = message.encryptedForRecipient || message.encrypted;
                     decryptedContent = await decryptMessage(encryptedData);
                 } else {
@@ -403,6 +429,11 @@ export default function Chat() {
                 // Update friends list to show last message indicator
                 fetchFriends();
             } catch (error) {
+                // Suppress expected errors for legacy/broken messages
+                if (error.name === 'OperationError' || error.name === 'InvalidCharacterError') {
+                    console.warn('Skipping unreadable incoming message');
+                    return;
+                }
                 console.error('Failed to decrypt incoming message:', error);
             }
         };
