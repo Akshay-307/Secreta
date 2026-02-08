@@ -28,6 +28,7 @@ export default function CallScreen({
     const remoteVideoRef = useRef(null);
     const remoteAudioRef = useRef(null);
     const durationIntervalRef = useRef(null);
+    const iceCandidatesBuffer = useRef([]); // Buffer for early candidates
 
     // ... (rest of refs)
 
@@ -80,7 +81,7 @@ export default function CallScreen({
             // Handle ICE candidates
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
-                    console.log('Sending ICE candidate');
+                    console.log('generated ICE candidate', event.candidate);
                     socket.emit('ice_candidate', {
                         recipientId: friend.id,
                         candidate: event.candidate
@@ -93,21 +94,36 @@ export default function CallScreen({
                 console.log('Connection state changed:', pc.connectionState);
                 if (pc.connectionState === 'connected') {
                     setCallStatus('connected');
-                    durationIntervalRef.current = setInterval(() => {
-                        setDuration(d => d + 1);
-                    }, 1000);
+                    if (!durationIntervalRef.current) {
+                        durationIntervalRef.current = setInterval(() => {
+                            setDuration(d => d + 1);
+                        }, 1000);
+                    }
                 } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-                    // endCall(); // Don't auto-end immediately on disconnect, let user decide or retry
-                    console.log('Call disconnected or failed');
+                    console.log('Call connection failed/closed');
+                }
+            };
+
+            // Handle ICE connection state specifically
+            pc.oniceconnectionstatechange = () => {
+                console.log('ICE connection state:', pc.iceConnectionState);
+                if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                    // Backup connection check
+                    if (callStatus !== 'connected') {
+                        setCallStatus('connected');
+                    }
                 }
             };
 
             // Create and send offer (if initiating)
             if (!isIncoming) {
                 console.log('Creating offer...');
-                const offer = await pc.createOffer();
+                const offer = await pc.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: isVideo
+                });
                 await pc.setLocalDescription(offer);
-                console.log('Sending call_offer...');
+                console.log('Sending call_offer...', offer);
                 socket.emit('call_offer', {
                     recipientId: friend.id,
                     offer: pc.localDescription,
@@ -143,30 +159,57 @@ export default function CallScreen({
         }
     };
 
+    // Process buffered candidates once remote description is set
+    const processBufferedCandidates = useCallback(async () => {
+        const pc = peerConnectionRef.current;
+        if (!pc || !pc.remoteDescription) return;
+
+        console.log(`Processing ${iceCandidatesBuffer.current.length} buffered ICE candidates`);
+        while (iceCandidatesBuffer.current.length > 0) {
+            const candidate = iceCandidatesBuffer.current.shift();
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                console.log('Successfully added buffered ICE candidate');
+            } catch (error) {
+                console.error('Error adding buffered ICE candidate:', error);
+            }
+        }
+    }, []);
+
     // Handle offer (refactored for reuse)
     const handleOffer = useCallback(async (offerData) => {
         const pc = peerConnectionRef.current;
         if (pc && offerData) {
             try {
-                // Check if we already have a remote description
-                if (pc.signalingState !== 'stable') {
-                    console.warn('Connection already in progress (signaling state: ' + pc.signalingState + ')');
-                    return;
+                // If we're already stable, we might be re-negotiating or in a weird state.
+                if (pc.signalingState === 'stable') {
+                    console.log('Received offer while stable, processing renegotiation...');
                 }
 
+                console.log('Setting remote description (offer)...', offerData);
                 await pc.setRemoteDescription(new RTCSessionDescription(offerData));
-                const answer = await pc.createAnswer();
+
+                // Process any buffered candidates now that remote description is set
+                await processBufferedCandidates();
+
+                console.log('Creating answer...');
+                const answer = await pc.createAnswer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: isVideo
+                });
                 await pc.setLocalDescription(answer);
 
+                console.log('Sending call_answer...', answer);
                 socket.emit('call_answer', {
                     recipientId: friend.id,
                     answer: pc.localDescription
                 });
             } catch (error) {
                 console.error('Error handling offer:', error);
+                setCallStatus('error');
             }
         }
-    }, [socket, friend.id]);
+    }, [friend.id, socket, processBufferedCandidates, isVideo]);
 
     // Socket event handlers
     useEffect(() => {
@@ -182,7 +225,10 @@ export default function CallScreen({
             const pc = peerConnectionRef.current;
             if (pc) {
                 try {
+                    console.log('Received answer, setting remote description', answer);
                     await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                    // Process buffered candidates
+                    await processBufferedCandidates();
                 } catch (error) {
                     console.error('Error setting remote description:', error);
                 }
@@ -193,13 +239,23 @@ export default function CallScreen({
             const candidate = data.candidate;
             console.log('Received ICE candidate from remote');
             const pc = peerConnectionRef.current;
-            if (pc && candidate) {
-                try {
+
+            if (!pc) {
+                console.warn('PC not initialized yet, buffering candidate');
+                iceCandidatesBuffer.current.push(candidate);
+                return;
+            }
+
+            try {
+                if (pc.remoteDescription && pc.remoteDescription.type) {
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
                     console.log('Successfully added remote ICE candidate');
-                } catch (error) {
-                    console.error('Error adding ICE candidate:', error);
+                } else {
+                    console.log('Remote description not set, buffering candidate');
+                    iceCandidatesBuffer.current.push(candidate);
                 }
+            } catch (error) {
+                console.error('Error adding ICE candidate:', error);
             }
         };
 
