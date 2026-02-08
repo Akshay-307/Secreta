@@ -255,7 +255,7 @@ export default function Chat() {
 
         } catch (error) {
             console.error('Failed to send file:', error);
-            // Show error notification
+            alert(`File upload failed: ${error.message || 'Unknown error'}`);
         }
     };
 

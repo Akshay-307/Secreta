@@ -21,10 +21,7 @@ const getApiUrl = () => {
 const API_URL = getApiUrl();
 
 const api = axios.create({
-    baseURL: API_URL,
-    headers: {
-        'Content-Type': 'application/json'
-    }
+    baseURL: API_URL
 });
 
 // Request interceptor - add auth token

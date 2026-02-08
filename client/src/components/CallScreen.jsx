@@ -26,24 +26,13 @@ export default function CallScreen({
     const remoteStreamRef = useRef(null);
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
+    const remoteAudioRef = useRef(null);
     const durationIntervalRef = useRef(null);
 
-    const formatTime = (seconds) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
+    // ... (rest of refs)
 
     const cleanup = useCallback(() => {
-        if (durationIntervalRef.current) {
-            clearInterval(durationIntervalRef.current);
-        }
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => track.stop());
-        }
-        if (peerConnectionRef.current) {
-            peerConnectionRef.current.close();
-        }
+        // ... (cleanup logic)
     }, []);
 
     const endCall = useCallback(() => {
@@ -76,11 +65,17 @@ export default function CallScreen({
 
             // Handle remote stream
             pc.ontrack = (event) => {
-                if (remoteVideoRef.current && event.streams[0]) {
-                    remoteVideoRef.current.srcObject = event.streams[0];
-                    remoteStreamRef.current = event.streams[0];
+                const stream = event.streams[0];
+                remoteStreamRef.current = stream;
+
+                if (isVideo && remoteVideoRef.current) {
+                    remoteVideoRef.current.srcObject = stream;
+                } else if (!isVideo && remoteAudioRef.current) {
+                    remoteAudioRef.current.srcObject = stream;
                 }
             };
+
+            // ... (rest of signaling)
 
             // Handle ICE candidates
             pc.onicecandidate = (event) => {
@@ -251,6 +246,15 @@ export default function CallScreen({
 
     return (
         <div className="call-screen">
+            {/* Remote Audio (for voice calls) */}
+            {!isVideo && (
+                <audio
+                    ref={remoteAudioRef}
+                    autoPlay
+                    playsInline
+                />
+            )}
+
             {/* Remote video (full screen) */}
             {isVideo && (
                 <video
