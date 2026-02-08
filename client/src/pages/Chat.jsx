@@ -229,20 +229,24 @@ export default function Chat() {
             console.log('File uploaded, ID:', response.data.fileId);
 
             // Send message with file attachment metadata
-            console.log('Emitting send_message event...');
+            // Prepare encryption metadata
+            const encryptionMetadata = {
+                ephemeralPublicKey: encryptedData.ephemeralPublicKey,
+                iv: btoa(String.fromCharCode(...encryptedData.iv)),
+                ciphertext: 'FILE' // Placeholder to satisfy server validation
+            };
+
             socket.emit('send_message', {
                 recipientId: selectedFriend.id,
                 messageType: file.type.startsWith('image/') ? 'image' : 'file',
+                encryptedForRecipient: encryptionMetadata,
+                encryptedForSender: encryptionMetadata, // Simulating sender copy for structure
                 fileAttachment: {
                     fileId: response.data.fileId,
                     fileName: file.name,
                     fileSize: file.size,
                     mimeType: file.type,
-                    encryptedMetadata: {
-                        ephemeralPublicKey: encryptedData.ephemeralPublicKey,
-                        iv: btoa(String.fromCharCode(...encryptedData.iv)),
-                        ciphertext: '' // Metadata is usually just the file content encryption info
-                    }
+                    encryptedMetadata: encryptionMetadata
                 }
             }, (response) => {
                 if (response.error) {
@@ -352,9 +356,18 @@ export default function Chat() {
         // New message received
         const handleNewMessage = async (message) => {
             try {
-                // Use encryptedForRecipient for incoming messages (or fallback to encrypted)
-                const encryptedData = message.encryptedForRecipient || message.encrypted;
-                const decryptedContent = await decryptMessage(encryptedData);
+                let decryptedContent = '';
+
+                // If it's a text message, decrypt content
+                if (!message.messageType || message.messageType === 'text') {
+                    // Use encryptedForRecipient for incoming messages (or fallback to encrypted)
+                    const encryptedData = message.encryptedForRecipient || message.encrypted;
+                    decryptedContent = await decryptMessage(encryptedData);
+                } else {
+                    // For files, content is just a label/placeholder
+                    decryptedContent = message.messageType === 'image' ? '📷 Image' : '📎 File';
+                }
+
                 const decryptedMessage = { ...message, content: decryptedContent };
 
                 setMessages(prev => {
