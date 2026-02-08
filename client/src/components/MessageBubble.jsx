@@ -125,7 +125,8 @@ export default function MessageBubble({
                         file={{
                             name: message.fileAttachment.fileName,
                             size: message.fileAttachment.fileSize,
-                            mimeType: message.fileAttachment.mimeType
+                            mimeType: message.fileAttachment.mimeType,
+                            previewUrl: message.previewUrl
                         }}
                         onDownload={handleFileDownload}
                         isDownloading={isDownloading}

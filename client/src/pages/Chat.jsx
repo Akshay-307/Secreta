@@ -107,6 +107,30 @@ export default function Chat() {
                             console.error('Failed to load voice message:', err);
                             decryptedContent = '⚠️ Voice Message Failed';
                         }
+                    } else if (msg.messageType === 'image' && msg.fileAttachment) {
+                        // Auto-fetch image data
+                        try {
+                            const fileResponse = await api.get(`/files/${msg.fileAttachment.fileId}`, {
+                                responseType: 'arraybuffer'
+                            });
+
+                            // Decrypt image
+                            const iv = Uint8Array.from(atob(msg.fileAttachment.encryptedMetadata.iv), c => c.charCodeAt(0));
+                            const decryptedImage = await decryptFile(
+                                fileResponse.data,
+                                msg.fileAttachment.encryptedMetadata.ephemeralPublicKey,
+                                iv
+                            );
+
+                            const blob = new Blob([decryptedImage], { type: msg.fileAttachment.mimeType });
+                            // Reuse audioUrl variable for the blob URL to avoid adding new field, or better add generic 'mediaUrl'
+                            // But existing code used audioUrl. Let's add previewUrl.
+                            msg.previewUrl = URL.createObjectURL(blob);
+                            decryptedContent = '📷 Image';
+                        } catch (err) {
+                            console.error('Failed to load image:', err);
+                            decryptedContent = '⚠️ Image Failed';
+                        }
                     } else if (!msg.messageType) {
                         if (isPlaceholder) {
                             decryptedContent = '📎 Attachment';
@@ -446,6 +470,28 @@ export default function Chat() {
                     } catch (err) {
                         console.error('Failed to load voice message:', err);
                         decryptedContent = '⚠️ Voice Message Failed';
+                    }
+                } else if (message.messageType === 'image' && message.fileAttachment) {
+                    // Auto-fetch image data
+                    try {
+                        const fileResponse = await api.get(`/files/${message.fileAttachment.fileId}`, {
+                            responseType: 'arraybuffer'
+                        });
+
+                        // Decrypt image
+                        const iv = Uint8Array.from(atob(message.fileAttachment.encryptedMetadata.iv), c => c.charCodeAt(0));
+                        const decryptedImage = await decryptFile(
+                            fileResponse.data,
+                            message.fileAttachment.encryptedMetadata.ephemeralPublicKey,
+                            iv
+                        );
+
+                        const blob = new Blob([decryptedImage], { type: message.fileAttachment.mimeType });
+                        message.previewUrl = URL.createObjectURL(blob);
+                        decryptedContent = '📷 Image';
+                    } catch (err) {
+                        console.error('Failed to load image:', err);
+                        decryptedContent = '⚠️ Image Failed';
                     }
                 } else if (!message.messageType) {
                     if (isPlaceholder) {

@@ -145,13 +145,22 @@ export function FileMessage({ file, onDownload, isDownloading }) {
     const icon = getFileIcon(file.mimeType);
     const isImage = file.mimeType?.startsWith('image/');
 
+    if (isImage && file.previewUrl) {
+        return (
+            <div className="file-message-inline" onClick={onDownload}>
+                <img src={file.previewUrl} alt={file.name} className="file-image-inline" />
+                {isDownloading && (
+                    <div className="file-overlay">
+                        <span className="loading-spinner">⏳</span>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div className="file-message" onClick={onDownload}>
-            {isImage && file.previewUrl ? (
-                <img src={file.previewUrl} alt={file.name} className="file-image" />
-            ) : (
-                <div className="file-message-icon">{icon}</div>
-            )}
+            <div className="file-message-icon">{icon}</div>
             <div className="file-message-info">
                 <span className="file-message-name">{file.name}</span>
                 <span className="file-message-size">{formatFileSize(file.size)}</span>
