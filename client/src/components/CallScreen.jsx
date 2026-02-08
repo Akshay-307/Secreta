@@ -85,6 +85,7 @@ export default function CallScreen({
             // Handle ICE candidates
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
+                    console.log('Sending ICE candidate');
                     socket.emit('ice_candidate', {
                         recipientId: friend.id,
                         candidate: event.candidate
@@ -94,20 +95,24 @@ export default function CallScreen({
 
             // Handle connection state
             pc.onconnectionstatechange = () => {
+                console.log('Connection state changed:', pc.connectionState);
                 if (pc.connectionState === 'connected') {
                     setCallStatus('connected');
                     durationIntervalRef.current = setInterval(() => {
                         setDuration(d => d + 1);
                     }, 1000);
                 } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-                    endCall();
+                    // endCall(); // Don't auto-end immediately on disconnect, let user decide or retry
+                    console.log('Call disconnected or failed');
                 }
             };
 
             // Create and send offer (if initiating)
             if (!isIncoming) {
+                console.log('Creating offer...');
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
+                console.log('Sending call_offer...');
                 socket.emit('call_offer', {
                     recipientId: friend.id,
                     offer: pc.localDescription,

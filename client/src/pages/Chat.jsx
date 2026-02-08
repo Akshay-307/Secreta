@@ -185,17 +185,32 @@ export default function Chat() {
 
     // Handle file upload and send
     const handleSendFile = async (file) => {
-        if (!selectedFriend) return;
+        console.log('Starting file send:', file.name, file.type, file.size);
+        if (!selectedFriend) {
+            console.error('No friend selected');
+            return;
+        }
         const socket = getSocket();
-        if (!socket) return;
+        if (!socket) {
+            console.error('Socket not connected');
+            return;
+        }
 
         try {
             // Get keys
+            console.log('Fetching public keys...');
             const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
             const myPublicKey = await getStoredPublicKeyJwk();
 
+            if (!recipientPublicKey) {
+                console.error('Recipient public key not found');
+                return;
+            }
+
             // Encrypt file
+            console.log('Encrypting file...');
             const encryptedData = await encryptFile(file, recipientPublicKey, myPublicKey);
+            console.log('File encrypted successfully');
 
             // Upload to server
             // Create FormData
@@ -204,14 +219,17 @@ export default function Chat() {
             const encryptedBlob = new Blob([encryptedData.encryptedData]);
             formData.append('file', encryptedBlob, 'encrypted');
 
+            console.log('Uploading file to server...');
             // Add headers for friend verification
             const response = await api.post('/files/upload', formData, {
                 headers: {
                     'x-recipient-id': selectedFriend.id
                 }
             });
+            console.log('File uploaded, ID:', response.data.fileId);
 
             // Send message with file attachment metadata
+            console.log('Emitting send_message event...');
             socket.emit('send_message', {
                 recipientId: selectedFriend.id,
                 messageType: file.type.startsWith('image/') ? 'image' : 'file',
@@ -231,6 +249,7 @@ export default function Chat() {
                     console.error('Send file failed:', response.error);
                     return;
                 }
+                console.log('Message sent successfully:', response.message);
                 setMessages(prev => [...prev, response.message]);
             });
 
