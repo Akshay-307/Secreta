@@ -7,6 +7,9 @@
 import { useState, useRef, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
 import WallpaperPicker from './WallpaperPicker';
+import FileAttachment from './FileAttachment';
+import VoiceRecorder from './VoiceRecorder';
+import CallScreen from './CallScreen';
 import { getWallpaper, PRESET_WALLPAPERS } from '../utils/wallpaperManager';
 import './ChatWindow.css';
 
@@ -32,13 +35,16 @@ export default function ChatWindow({
     friend,
     messages,
     onSendMessage,
+    onSendFile,
+    onSendVoice,
     onTyping,
     isTyping,
     isOnline,
     onBack,
     showBackButton,
     onReact,
-    currentUserId
+    currentUserId,
+    socket
 }) {
     const [input, setInput] = useState('');
     const [typingTimeout, setTypingTimeout] = useState(null);
@@ -47,6 +53,9 @@ export default function ChatWindow({
     const [wallpaper, setWallpaper] = useState(PRESET_WALLPAPERS[0]);
     const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
     const [replyingTo, setReplyingTo] = useState(null);
+    const [showFileAttachment, setShowFileAttachment] = useState(false);
+    const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+    const [activeCall, setActiveCall] = useState(null); // { isVideo: boolean, isIncoming: boolean }
     const messagesEndRef = useRef(null);
 
     // Load wallpaper for this chat
@@ -60,6 +69,20 @@ export default function ChatWindow({
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    // Listen for incoming calls
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleIncomingCall = ({ callerId, isVideo }) => {
+            if (callerId === friend.id) {
+                setActiveCall({ isVideo, isIncoming: true });
+            }
+        };
+
+        socket.on('call_offer', handleIncomingCall);
+        return () => socket.off('call_offer', handleIncomingCall);
+    }, [socket, friend?.id]);
 
     const handleSend = (e) => {
         e.preventDefault();
@@ -101,6 +124,23 @@ export default function ChatWindow({
         setReplyingTo(message);
     };
 
+    const handleFileAttach = (file) => {
+        if (onSendFile) {
+            onSendFile(file);
+        }
+    };
+
+    const handleVoiceRecord = (voiceData) => {
+        if (onSendVoice) {
+            onSendVoice(voiceData);
+        }
+        setIsRecordingVoice(false);
+    };
+
+    const startCall = (isVideo) => {
+        setActiveCall({ isVideo, isIncoming: false });
+    };
+
     const getWallpaperStyle = () => {
         if (wallpaper.type === 'image') {
             return { backgroundImage: `url(${wallpaper.value})`, backgroundSize: 'cover', backgroundPosition: 'center' };
@@ -140,6 +180,20 @@ export default function ChatWindow({
                     </div>
                 </div>
                 <div className="chat-header-actions">
+                    <button
+                        className="header-action-btn"
+                        onClick={() => startCall(false)}
+                        title="Voice call"
+                    >
+                        📞
+                    </button>
+                    <button
+                        className="header-action-btn"
+                        onClick={() => startCall(true)}
+                        title="Video call"
+                    >
+                        📹
+                    </button>
                     <button
                         className="header-action-btn"
                         onClick={() => setShowWallpaperPicker(true)}
@@ -225,20 +279,54 @@ export default function ChatWindow({
                 </div>
             )}
 
-            {/* Input */}
-            <form className="message-input-form" onSubmit={handleSend}>
-                <input
-                    type="text"
-                    value={input}
-                    onChange={handleInputChange}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Type a message..."
-                    className="message-input"
+            {/* Input area */}
+            {isRecordingVoice ? (
+                <VoiceRecorder
+                    onRecord={handleVoiceRecord}
+                    onCancel={() => setIsRecordingVoice(false)}
                 />
-                <button type="submit" className="send-button" disabled={!input.trim()}>
-                    <span>➤</span>
-                </button>
-            </form>
+            ) : (
+                <form className="message-input-form" onSubmit={handleSend}>
+                    <button
+                        type="button"
+                        className="input-action-btn"
+                        onClick={() => setShowFileAttachment(true)}
+                        title="Attach file"
+                    >
+                        📎
+                    </button>
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={handleInputChange}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Type a message..."
+                        className="message-input"
+                    />
+                    {input.trim() ? (
+                        <button type="submit" className="send-button">
+                            <span>➤</span>
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            className="voice-btn"
+                            onClick={() => setIsRecordingVoice(true)}
+                            title="Record voice message"
+                        >
+                            🎤
+                        </button>
+                    )}
+                </form>
+            )}
+
+            {/* File Attachment Modal */}
+            {showFileAttachment && (
+                <FileAttachment
+                    onAttach={handleFileAttach}
+                    onClose={() => setShowFileAttachment(false)}
+                />
+            )}
 
             {/* Wallpaper Picker Modal */}
             {showWallpaperPicker && (
@@ -249,7 +337,19 @@ export default function ChatWindow({
                     onClose={() => setShowWallpaperPicker(false)}
                 />
             )}
+
+            {/* Call Screen */}
+            {activeCall && (
+                <CallScreen
+                    socket={socket}
+                    friend={friend}
+                    isIncoming={activeCall.isIncoming}
+                    isVideo={activeCall.isVideo}
+                    onEnd={() => setActiveCall(null)}
+                />
+            )}
         </div>
     );
 }
+
 
