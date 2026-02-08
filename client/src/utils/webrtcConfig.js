@@ -10,8 +10,8 @@
 // VITE_METERED_API_KEY=your_api_key_here
 // VITE_METERED_DOMAIN=your_domain.metered.live
 
-const METERED_API_KEY = import.meta.env.VITE_METERED_API_KEY || '';
-const METERED_DOMAIN = import.meta.env.VITE_METERED_DOMAIN || '';
+const METERED_API_KEY = (import.meta.env.VITE_METERED_API_KEY || '').trim();
+const METERED_DOMAIN = (import.meta.env.VITE_METERED_DOMAIN || '').trim();
 
 /**
  * Fetch ICE servers from Metered API

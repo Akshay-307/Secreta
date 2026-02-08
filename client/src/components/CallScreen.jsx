@@ -194,11 +194,14 @@ export default function CallScreen({
             }
         };
 
-        const handleIceCandidate = async ({ candidate }) => {
+        const handleIceCandidate = async (data) => {
+            const candidate = data.candidate;
+            console.log('Received ICE candidate from remote');
             const pc = peerConnectionRef.current;
             if (pc && candidate) {
                 try {
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    console.log('Successfully added remote ICE candidate');
                 } catch (error) {
                     console.error('Error adding ICE candidate:', error);
                 }
