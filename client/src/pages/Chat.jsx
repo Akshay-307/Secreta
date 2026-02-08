@@ -207,7 +207,6 @@ export default function Chat() {
             // Add headers for friend verification
             const response = await api.post('/files/upload', formData, {
                 headers: {
-                    'Content-Type': 'multipart/form-data',
                     'x-recipient-id': selectedFriend.id
                 }
             });
@@ -264,7 +263,6 @@ export default function Chat() {
 
             const response = await api.post('/files/upload', formData, {
                 headers: {
-                    'Content-Type': 'multipart/form-data',
                     'x-recipient-id': selectedFriend.id
                 }
             });

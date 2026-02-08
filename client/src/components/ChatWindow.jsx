@@ -75,9 +75,9 @@ export default function ChatWindow({
     useEffect(() => {
         if (!socket) return;
 
-        const handleIncomingCall = ({ callerId, isVideo }) => {
+        const handleIncomingCall = ({ callerId, isVideo, offer }) => {
             if (callerId === friend.id) {
-                setActiveCall({ isVideo, isIncoming: true });
+                setActiveCall({ isVideo, isIncoming: true, offer });
             }
         };
 
@@ -347,6 +347,7 @@ export default function ChatWindow({
                     friend={friend}
                     isIncoming={activeCall.isIncoming}
                     isVideo={activeCall.isVideo}
+                    offer={activeCall.offer}
                     onEnd={() => setActiveCall(null)}
                 />
             )}

@@ -13,6 +13,7 @@ export default function CallScreen({
     friend,
     isIncoming = false,
     isVideo = false,
+    offer = null, // Accept initial offer
     onEnd
 }) {
     const [callStatus, setCallStatus] = useState(isIncoming ? 'incoming' : 'calling');
@@ -142,36 +143,60 @@ export default function CallScreen({
         }
     };
 
+    // Handle offer (refactored for reuse)
+    const handleOffer = useCallback(async (offerData) => {
+        const pc = peerConnectionRef.current;
+        if (pc && offerData) {
+            try {
+                // Check if we already have a remote description
+                if (pc.signalingState !== 'stable') {
+                    console.warn('Connection already in progress (signaling state: ' + pc.signalingState + ')');
+                    return;
+                }
+
+                await pc.setRemoteDescription(new RTCSessionDescription(offerData));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                socket.emit('call_answer', {
+                    recipientId: friend.id,
+                    answer: pc.localDescription
+                });
+            } catch (error) {
+                console.error('Error handling offer:', error);
+            }
+        }
+    }, [socket, friend.id]);
+
     // Socket event handlers
     useEffect(() => {
         if (!socket) return;
 
-        const handleOffer = async ({ offer, callerId }) => {
+        const onOffer = ({ offer, callerId }) => {
             if (callStatus === 'incoming' && callerId === friend.id) {
-                const pc = peerConnectionRef.current;
-                if (pc) {
-                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    socket.emit('call_answer', {
-                        recipientId: friend.id,
-                        answer: pc.localDescription
-                    });
-                }
+                handleOffer(offer);
             }
         };
 
         const handleAnswer = async ({ answer }) => {
             const pc = peerConnectionRef.current;
             if (pc) {
-                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                } catch (error) {
+                    console.error('Error setting remote description:', error);
+                }
             }
         };
 
         const handleIceCandidate = async ({ candidate }) => {
             const pc = peerConnectionRef.current;
             if (pc && candidate) {
-                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (error) {
+                    console.error('Error adding ICE candidate:', error);
+                }
             }
         };
 
@@ -180,27 +205,41 @@ export default function CallScreen({
             onEnd();
         };
 
-        socket.on('call_offer', handleOffer);
+        // If we have an initial offer prop, handle it
+        if (isIncoming && offer && !peerConnectionRef.current?.remoteDescription) {
+            // We need to wait for PC to be initialized. 
+            // initializeCall runs on mount, but it's async. 
+            // We'll handle this in the initializeCall's promise chain or effect.
+        }
+
+        socket.on('call_offer', onOffer);
         socket.on('call_answer', handleAnswer);
         socket.on('ice_candidate', handleIceCandidate);
         socket.on('call_end', handleCallEnd);
 
         return () => {
-            socket.off('call_offer', handleOffer);
+            socket.off('call_offer', onOffer);
             socket.off('call_answer', handleAnswer);
             socket.off('ice_candidate', handleIceCandidate);
             socket.off('call_end', handleCallEnd);
         };
-    }, [socket, friend.id, callStatus, cleanup, onEnd]);
+    }, [socket, friend.id, callStatus, cleanup, onEnd, isIncoming, offer, handleOffer]);
 
-    // Initialize call on mount (for outgoing calls)
+    // Initialize call and handle initial offer
     useEffect(() => {
-        if (!isIncoming) {
-            initializeCall();
-        }
+        const init = async () => {
+            await initializeCall();
+
+            // If we have an initial offer, process it after initialization
+            if (isIncoming && offer && peerConnectionRef.current) {
+                await handleOffer(offer);
+            }
+        };
+
+        init();
 
         return cleanup;
-    }, []);
+    }, []); // Run once on mount
 
     return (
         <div className="call-screen">
