@@ -84,7 +84,13 @@ export default function Chat() {
                             return { ...msg, content: '[No encryption data]' };
                         }
 
-                        const decryptedContent = await decryptMessage(encryptedData);
+                        let decryptedContent = '';
+                        if (!msg.messageType || msg.messageType === 'text') {
+                            decryptedContent = await decryptMessage(encryptedData);
+                        } else {
+                            decryptedContent = msg.messageType === 'image' ? '📷 Image' : '📎 File';
+                        }
+
                         return { ...msg, content: decryptedContent };
                     } catch (error) {
                         console.error('Failed to decrypt message:', error);
