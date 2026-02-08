@@ -66,6 +66,28 @@ const userSchema = new mongoose.Schema({
     verificationExpires: {
         type: Date,
         default: null
+    },
+    // User status (shown to friends)
+    status: {
+        text: {
+            type: String,
+            maxlength: 100,
+            default: ''
+        },
+        emoji: {
+            type: String,
+            default: ''
+        },
+        updatedAt: {
+            type: Date,
+            default: Date.now
+        }
+    },
+    // User bio
+    bio: {
+        type: String,
+        maxlength: 150,
+        default: ''
     }
 }, {
     timestamps: true

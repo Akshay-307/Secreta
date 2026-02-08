@@ -1,5 +1,6 @@
 import express from 'express';
 import Friendship from '../models/Friendship.js';
+import BlockedUser from '../models/BlockedUser.js';
 import User from '../models/User.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { io } from '../index.js';
@@ -24,7 +25,7 @@ router.get('/', async (req, res) => {
                 { requester: userId, status: 'accepted' },
                 { recipient: userId, status: 'accepted' }
             ]
-        }).populate('requester recipient', '_id username publicKey lastSeen avatar');
+        }).populate('requester recipient', '_id username publicKey lastSeen avatar status bio');
 
         const friends = friendships.map(f => {
             const friend = f.requester._id.toString() === userId
@@ -36,7 +37,9 @@ router.get('/', async (req, res) => {
                 username: friend.username,
                 hasPublicKey: !!friend.publicKey,
                 lastSeen: friend.lastSeen,
-                avatar: friend.avatar || null
+                avatar: friend.avatar || null,
+                status: friend.status || { text: '', emoji: '' },
+                bio: friend.bio || ''
             };
         });
 
@@ -246,4 +249,93 @@ router.delete('/:friendId', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/friends/block/:userId
+ * 
+ * Block a user - prevents messaging and hides online status
+ */
+router.post('/block/:userId', async (req, res) => {
+    try {
+        const blockerId = req.user.userId;
+        const blockedId = req.params.userId;
+
+        if (blockerId === blockedId) {
+            return res.status(400).json({ error: 'Cannot block yourself' });
+        }
+
+        // Check if already blocked
+        const existing = await BlockedUser.findOne({ blockerId, blockedId });
+        if (existing) {
+            return res.status(400).json({ error: 'User is already blocked' });
+        }
+
+        // Create block entry
+        const block = new BlockedUser({ blockerId, blockedId });
+        await block.save();
+
+        // Also remove friendship if exists
+        await Friendship.findOneAndDelete({
+            $or: [
+                { requester: blockerId, recipient: blockedId },
+                { requester: blockedId, recipient: blockerId }
+            ]
+        });
+
+        res.json({ message: 'User blocked' });
+    } catch (error) {
+        console.error('Block user error:', error);
+        res.status(500).json({ error: 'Failed to block user' });
+    }
+});
+
+/**
+ * DELETE /api/friends/block/:userId
+ * 
+ * Unblock a user
+ */
+router.delete('/block/:userId', async (req, res) => {
+    try {
+        const blockerId = req.user.userId;
+        const blockedId = req.params.userId;
+
+        const result = await BlockedUser.findOneAndDelete({ blockerId, blockedId });
+
+        if (!result) {
+            return res.status(404).json({ error: 'Block not found' });
+        }
+
+        res.json({ message: 'User unblocked' });
+    } catch (error) {
+        console.error('Unblock user error:', error);
+        res.status(500).json({ error: 'Failed to unblock user' });
+    }
+});
+
+/**
+ * GET /api/friends/blocked
+ * 
+ * Get list of blocked users
+ */
+router.get('/blocked', async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        const blockedUsers = await BlockedUser.find({ blockerId: userId })
+            .populate('blockedId', '_id username avatar');
+
+        const formatted = blockedUsers.map(b => ({
+            id: b.blockedId._id,
+            username: b.blockedId.username,
+            avatar: b.blockedId.avatar || null,
+            blockedAt: b.createdAt
+        }));
+
+        res.json(formatted);
+    } catch (error) {
+        console.error('Get blocked users error:', error);
+        res.status(500).json({ error: 'Failed to get blocked users' });
+    }
+});
+
 export default router;
+

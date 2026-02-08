@@ -76,7 +76,7 @@ export const setupSocketHandlers = (io) => {
                 }
 
                 // Save encrypted message with both versions
-                const message = new Message({
+                const messageData = {
                     senderId: userId,
                     recipientId,
                     encryptedForRecipient: {
@@ -89,13 +89,21 @@ export const setupSocketHandlers = (io) => {
                         iv: forSender.iv,
                         ciphertext: forSender.ciphertext
                     } : null,
+                    // Reply support
+                    replyTo: data.replyTo || null,
+                    replyPreview: data.replyPreview || null,
+                    // Ephemeral (disappearing) messages - 24 hour expiration
+                    isEphemeral: !!data.isEphemeral,
+                    expiresAt: data.isEphemeral ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null,
                     // Keep legacy field for backward compatibility
                     encrypted: {
                         ephemeralPublicKey: forRecipient.ephemeralPublicKey,
                         iv: forRecipient.iv,
                         ciphertext: forRecipient.ciphertext
                     }
-                });
+                };
+
+                const message = new Message(messageData);
 
                 await message.save();
 
@@ -107,6 +115,8 @@ export const setupSocketHandlers = (io) => {
                     encryptedForRecipient: message.encryptedForRecipient,
                     encryptedForSender: message.encryptedForSender,
                     encrypted: message.encryptedForRecipient, // Legacy support
+                    replyTo: message.replyTo,
+                    replyPreview: message.replyPreview,
                     createdAt: message.createdAt,
                     delivered: false,
                     read: false
@@ -233,6 +243,68 @@ export const setupSocketHandlers = (io) => {
                 }
             } catch (error) {
                 console.error('Mark read error:', error);
+            }
+        });
+
+        /**
+         * WebRTC Call Signaling
+         */
+
+        // Handle call offer
+        socket.on('call_offer', (data) => {
+            const { recipientId, offer, isVideo } = data;
+            const recipientSockets = userSockets.get(recipientId);
+
+            if (recipientSockets) {
+                recipientSockets.forEach(socketId => {
+                    io.to(socketId).emit('call_offer', {
+                        callerId: userId,
+                        offer,
+                        isVideo
+                    });
+                });
+            }
+        });
+
+        // Handle call answer
+        socket.on('call_answer', (data) => {
+            const { recipientId, answer } = data;
+            const recipientSockets = userSockets.get(recipientId);
+
+            if (recipientSockets) {
+                recipientSockets.forEach(socketId => {
+                    io.to(socketId).emit('call_answer', {
+                        answererId: userId,
+                        answer
+                    });
+                });
+            }
+        });
+
+        // Handle ICE candidates
+        socket.on('ice_candidate', (data) => {
+            const { recipientId, candidate } = data;
+            const recipientSockets = userSockets.get(recipientId);
+
+            if (recipientSockets) {
+                recipientSockets.forEach(socketId => {
+                    io.to(socketId).emit('ice_candidate', {
+                        senderId: userId,
+                        candidate
+                    });
+                });
+            }
+        });
+
+        // Handle call end
+        socket.on('call_end', (data) => {
+            const { recipientId } = data;
+            const recipientSockets = userSockets.get(recipientId);
+
+            if (recipientSockets) {
+                recipientSockets.forEach(socketId => {
+                    io.to(socketId).emit('call_end', { endedBy: userId });
+                });
             }
         });
 

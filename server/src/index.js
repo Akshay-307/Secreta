@@ -5,8 +5,10 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 
 import { connectDB } from './config/database.js';
+import { initGridFS } from './config/gridfs.js';
 import { authenticateSocket } from './middleware/auth.js';
 import { setupSocketHandlers } from './socket/handlers.js';
+import { startMessageCleanup } from './jobs/messageCleanup.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -14,6 +16,7 @@ import usersRoutes from './routes/users.js';
 import friendsRoutes from './routes/friends.js';
 import messagesRoutes from './routes/messages.js';
 import avatarRoutes from './routes/avatar.js';
+import filesRoutes from './routes/files.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -50,6 +53,7 @@ app.use('/api/users', usersRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/avatar', avatarRoutes);
+app.use('/api/files', filesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -62,6 +66,9 @@ io.use(authenticateSocket);
 // Socket.IO handlers
 setupSocketHandlers(io);
 
+// Start message cleanup job
+startMessageCleanup();
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Server error:', err);
@@ -73,6 +80,7 @@ const PORT = process.env.PORT || 3001;
 
 const startServer = async () => {
     await connectDB();
+    initGridFS();
 
     httpServer.listen(PORT, () => {
         console.log(`

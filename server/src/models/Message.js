@@ -74,7 +74,36 @@ const messageSchema = new mongoose.Schema({
     reactions: [{
         emoji: { type: String, required: true },
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
-    }]
+    }],
+    // Reply to another message
+    replyTo: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Message',
+        default: null
+    },
+    // Preview of the replied message (encrypted)
+    replyPreview: {
+        senderId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        // Encrypted content preview
+        encryptedPreview: {
+            ephemeralPublicKey: Object,
+            iv: String,
+            ciphertext: String
+        }
+    },
+    // Disappearing messages support
+    isEphemeral: {
+        type: Boolean,
+        default: false
+    },
+    expiresAt: {
+        type: Date,
+        default: null,
+        index: true // Index for efficient cleanup queries
+    }
 }, {
     timestamps: true
 });

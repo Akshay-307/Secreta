@@ -105,6 +105,22 @@
     gap: 0.5rem;
 }
 
+.header-action-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.125rem;
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    opacity: 0.6;
+}
+
+.header-action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    opacity: 1;
+}
+
 .search-toggle {
     background: transparent;
     border: none;

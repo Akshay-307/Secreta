@@ -104,4 +104,91 @@ router.get('/:userId/public-key', async (req, res) => {
     }
 });
 
+/**
+ * PUT /api/users/status
+ * 
+ * Update user status (text and emoji)
+ */
+router.put('/status', async (req, res) => {
+    try {
+        const { text, emoji } = req.body;
+        const userId = req.user.userId;
+
+        const updateData = {
+            'status.updatedAt': new Date()
+        };
+
+        if (text !== undefined) {
+            if (text.length > 100) {
+                return res.status(400).json({ error: 'Status text must be 100 characters or less' });
+            }
+            updateData['status.text'] = text;
+        }
+
+        if (emoji !== undefined) {
+            updateData['status.emoji'] = emoji;
+        }
+
+        const user = await User.findByIdAndUpdate(
+            userId,
+            { $set: updateData },
+            { new: true }
+        ).select('status');
+
+        res.json({ status: user.status });
+    } catch (error) {
+        console.error('Update status error:', error);
+        res.status(500).json({ error: 'Failed to update status' });
+    }
+});
+
+/**
+ * PUT /api/users/bio
+ * 
+ * Update user bio
+ */
+router.put('/bio', async (req, res) => {
+    try {
+        const { bio } = req.body;
+        const userId = req.user.userId;
+
+        if (bio && bio.length > 150) {
+            return res.status(400).json({ error: 'Bio must be 150 characters or less' });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            userId,
+            { $set: { bio: bio || '' } },
+            { new: true }
+        ).select('bio');
+
+        res.json({ bio: user.bio });
+    } catch (error) {
+        console.error('Update bio error:', error);
+        res.status(500).json({ error: 'Failed to update bio' });
+    }
+});
+
+/**
+ * GET /api/users/profile
+ * 
+ * Get current user's profile including status and bio
+ */
+router.get('/profile', async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const user = await User.findById(userId).select('username email avatar status bio');
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json(user);
+    } catch (error) {
+        console.error('Get profile error:', error);
+        res.status(500).json({ error: 'Failed to get profile' });
+    }
+});
+
 export default router;
+

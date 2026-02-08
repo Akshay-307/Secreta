@@ -2,13 +2,24 @@
  * Message Bubble Component
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import ReplyPreview from './ReplyPreview';
 import './MessageBubble.css';
 
 const EMOJI_OPTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
 
-export default function MessageBubble({ message, isMine, onReact, currentUserId }) {
+export default function MessageBubble({
+    message,
+    isMine,
+    onReact,
+    currentUserId,
+    onReply,
+    onScrollToMessage,
+    friendName
+}) {
     const [showPicker, setShowPicker] = useState(false);
+    const [swipeOffset, setSwipeOffset] = useState(0);
+    const touchStartX = useRef(0);
 
     const formatTime = (date) => {
         return new Date(date).toLocaleTimeString([], {
@@ -20,6 +31,26 @@ export default function MessageBubble({ message, isMine, onReact, currentUserId 
     const handleReaction = (emoji) => {
         onReact?.(message._id, emoji);
         setShowPicker(false);
+    };
+
+    // Handle swipe to reply
+    const handleTouchStart = (e) => {
+        touchStartX.current = e.touches[0].clientX;
+    };
+
+    const handleTouchMove = (e) => {
+        const diff = e.touches[0].clientX - touchStartX.current;
+        // Only allow swipe right for reply
+        if (diff > 0 && diff < 80) {
+            setSwipeOffset(diff);
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (swipeOffset > 50) {
+            onReply?.(message);
+        }
+        setSwipeOffset(0);
     };
 
     // Group reactions by emoji with count
@@ -40,10 +71,10 @@ export default function MessageBubble({ message, isMine, onReact, currentUserId 
 
     // Render message content with clickable links
     function renderContent(text) {
+        if (!text) return null;
         const parts = text.split(URL_REGEX);
         return parts.map((part, i) => {
             if (URL_REGEX.test(part)) {
-                // Reset regex lastIndex after test
                 URL_REGEX.lastIndex = 0;
                 return (
                     <a
@@ -62,11 +93,40 @@ export default function MessageBubble({ message, isMine, onReact, currentUserId 
         });
     }
 
+    const handleReplyClick = () => {
+        if (message.replyTo && onScrollToMessage) {
+            onScrollToMessage(message.replyTo);
+        }
+    };
+
     return (
         <div
             className={`message-bubble ${isMine ? 'mine' : 'theirs'}`}
+            style={{ transform: `translateX(${swipeOffset}px)` }}
             onDoubleClick={() => setShowPicker(!showPicker)}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
         >
+            {/* Reply indicator on swipe */}
+            {swipeOffset > 20 && (
+                <div className="swipe-reply-indicator" style={{ opacity: swipeOffset / 60 }}>
+                    ↩️
+                </div>
+            )}
+
+            {/* Reply preview if this is a reply */}
+            {message.replyPreview && (
+                <ReplyPreview
+                    preview={{
+                        senderName: message.replyPreview.senderId === currentUserId ? 'You' : friendName,
+                        content: message.replyPreview.content
+                    }}
+                    isMine={isMine}
+                    onClick={handleReplyClick}
+                />
+            )}
+
             <div className="message-content">
                 {renderContent(message.content)}
             </div>
@@ -94,6 +154,9 @@ export default function MessageBubble({ message, isMine, onReact, currentUserId 
                             {emoji}
                         </button>
                     ))}
+                    <button onClick={() => { onReply?.(message); setShowPicker(false); }}>
+                        ↩️
+                    </button>
                 </div>
             )}
 
@@ -108,3 +171,4 @@ export default function MessageBubble({ message, isMine, onReact, currentUserId 
         </div>
     );
 }
+

@@ -6,6 +6,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
+import WallpaperPicker from './WallpaperPicker';
+import { getWallpaper, PRESET_WALLPAPERS } from '../utils/wallpaperManager';
 import './ChatWindow.css';
 
 // Format last seen time as relative string
@@ -42,7 +44,17 @@ export default function ChatWindow({
     const [typingTimeout, setTypingTimeout] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [showSearch, setShowSearch] = useState(false);
+    const [wallpaper, setWallpaper] = useState(PRESET_WALLPAPERS[0]);
+    const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
+    const [replyingTo, setReplyingTo] = useState(null);
     const messagesEndRef = useRef(null);
+
+    // Load wallpaper for this chat
+    useEffect(() => {
+        if (friend?.id) {
+            getWallpaper(friend.id).then(setWallpaper);
+        }
+    }, [friend?.id]);
 
     // Auto-scroll to bottom on new messages
     useEffect(() => {
@@ -53,8 +65,9 @@ export default function ChatWindow({
         e.preventDefault();
         if (!input.trim()) return;
 
-        onSendMessage(input);
+        onSendMessage(input, replyingTo);
         setInput('');
+        setReplyingTo(null);
         onTyping(false);
     };
 
@@ -81,6 +94,20 @@ export default function ChatWindow({
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSend(e);
+        }
+    };
+
+    const handleReply = (message) => {
+        setReplyingTo(message);
+    };
+
+    const getWallpaperStyle = () => {
+        if (wallpaper.type === 'image') {
+            return { backgroundImage: `url(${wallpaper.value})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+        } else if (wallpaper.type === 'gradient') {
+            return { background: wallpaper.value };
+        } else {
+            return { backgroundColor: wallpaper.value };
         }
     };
 
@@ -114,6 +141,13 @@ export default function ChatWindow({
                 </div>
                 <div className="chat-header-actions">
                     <button
+                        className="header-action-btn"
+                        onClick={() => setShowWallpaperPicker(true)}
+                        title="Change wallpaper"
+                    >
+                        🎨
+                    </button>
+                    <button
                         className={`search-toggle ${showSearch ? 'active' : ''}`}
                         onClick={() => { setShowSearch(!showSearch); setSearchQuery(''); }}
                         title="Search messages"
@@ -144,8 +178,8 @@ export default function ChatWindow({
                 </div>
             )}
 
-            {/* Messages */}
-            <div className="messages-container">
+            {/* Messages with wallpaper */}
+            <div className="messages-container" style={getWallpaperStyle()}>
                 {messages.length === 0 ? (
                     <div className="no-messages">
                         <span className="encryption-badge">🔐</span>
@@ -168,12 +202,28 @@ export default function ChatWindow({
                                     onReact={onReact}
                                     currentUserId={currentUserId}
                                     searchQuery={searchQuery}
+                                    onReply={handleReply}
+                                    friendName={friend.username}
                                 />
                             ))}
                     </>
                 )}
                 <div ref={messagesEndRef} />
             </div>
+
+            {/* Reply preview */}
+            {replyingTo && (
+                <div className="reply-input-bar">
+                    <div className="reply-bar" />
+                    <div className="reply-input-info">
+                        <span className="reply-to-name">
+                            Replying to {replyingTo.senderId === currentUserId ? 'yourself' : friend.username}
+                        </span>
+                        <span className="reply-to-text">{replyingTo.content}</span>
+                    </div>
+                    <button className="reply-cancel-btn" onClick={() => setReplyingTo(null)}>×</button>
+                </div>
+            )}
 
             {/* Input */}
             <form className="message-input-form" onSubmit={handleSend}>
@@ -189,6 +239,17 @@ export default function ChatWindow({
                     <span>➤</span>
                 </button>
             </form>
+
+            {/* Wallpaper Picker Modal */}
+            {showWallpaperPicker && (
+                <WallpaperPicker
+                    chatId={friend.id}
+                    currentWallpaper={wallpaper}
+                    onSelect={setWallpaper}
+                    onClose={() => setShowWallpaperPicker(false)}
+                />
+            )}
         </div>
     );
 }
+

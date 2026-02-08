@@ -52,12 +52,18 @@ export default function ChatList({ friends, selectedFriend, onSelectFriend, onli
                         {onlineUsers.has(friend.id) && <span className="online-indicator" />}
                     </div>
                     <div className="chat-item-info">
-                        <div className="chat-item-name">{friend.username}</div>
+                        <div className="chat-item-name">
+                            {friend.status?.emoji && <span className="friend-status-emoji">{friend.status.emoji}</span>}
+                            {friend.username}
+                        </div>
                         <div className="chat-item-status">
-                            {onlineUsers.has(friend.id)
-                                ? <span className="status-online">online</span>
-                                : <span className="status-offline">Last seen {formatLastSeen(friend.lastSeen)}</span>
-                            }
+                            {friend.status?.text ? (
+                                <span className="status-text-preview">{friend.status.text}</span>
+                            ) : onlineUsers.has(friend.id) ? (
+                                <span className="status-online">online</span>
+                            ) : (
+                                <span className="status-offline">Last seen {formatLastSeen(friend.lastSeen)}</span>
+                            )}
                         </div>
                     </div>
                 </div>

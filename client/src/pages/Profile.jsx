@@ -9,6 +9,7 @@ import { useTheme } from '../context/ThemeContext';
 import api from '../api/client';
 import { getAvatar, saveAvatar, processAvatar, deleteAvatar } from '../crypto/avatarManager';
 import { exportKeyBackup, importKeyBackup } from '../crypto/keyManager';
+import BlockedUsers from '../components/BlockedUsers';
 import './Profile.css';
 
 export default function Profile() {
@@ -20,10 +21,26 @@ export default function Profile() {
     const [avatar, setAvatar] = useState(null);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
+    const [status, setStatus] = useState({ text: '', emoji: '' });
+    const [bio, setBio] = useState('');
+    const [editingStatus, setEditingStatus] = useState(false);
+    const [editingBio, setEditingBio] = useState(false);
+    const [showBlockedUsers, setShowBlockedUsers] = useState(false);
 
     useEffect(() => {
         loadAvatar();
+        loadProfile();
     }, []);
+
+    const loadProfile = async () => {
+        try {
+            const res = await api.get('/users/profile');
+            setStatus(res.data.status || { text: '', emoji: '' });
+            setBio(res.data.bio || '');
+        } catch (error) {
+            console.error('Failed to load profile:', error);
+        }
+    };
 
     const loadAvatar = async () => {
         const savedAvatar = await getAvatar();
@@ -133,6 +150,30 @@ export default function Profile() {
         input.click();
     };
 
+    const handleSaveStatus = async () => {
+        try {
+            await api.put('/users/status', { text: status.text, emoji: status.emoji });
+            setEditingStatus(false);
+            setMessage('Status updated!');
+        } catch (error) {
+            console.error('Failed to save status:', error);
+            setMessage('Failed to update status');
+        }
+    };
+
+    const handleSaveBio = async () => {
+        try {
+            await api.put('/users/bio', { bio });
+            setEditingBio(false);
+            setMessage('Bio updated!');
+        } catch (error) {
+            console.error('Failed to save bio:', error);
+            setMessage('Failed to update bio');
+        }
+    };
+
+    const STATUS_EMOJIS = ['😊', '💼', '🎮', '😴', '🎵', '📚', '✈️', '🏠', '🤔', '❤️'];
+
     return (
         <div className="profile-page">
             <div className="profile-card glass-card-light">
@@ -176,6 +217,74 @@ export default function Profile() {
                     )}
                 </div>
 
+                {/* About Me Section */}
+                <div className="profile-section">
+                    <h2>About Me</h2>
+
+                    {/* Status */}
+                    <div className="about-item">
+                        <label>Status</label>
+                        {editingStatus ? (
+                            <div className="status-editor">
+                                <div className="emoji-picker">
+                                    {STATUS_EMOJIS.map(e => (
+                                        <button
+                                            key={e}
+                                            className={`emoji-btn ${status.emoji === e ? 'selected' : ''}`}
+                                            onClick={() => setStatus({ ...status, emoji: e })}
+                                        >
+                                            {e}
+                                        </button>
+                                    ))}
+                                </div>
+                                <input
+                                    type="text"
+                                    value={status.text}
+                                    onChange={(e) => setStatus({ ...status, text: e.target.value })}
+                                    placeholder="What's on your mind?"
+                                    maxLength={100}
+                                />
+                                <div className="edit-actions">
+                                    <button onClick={handleSaveStatus}>Save</button>
+                                    <button onClick={() => setEditingStatus(false)}>Cancel</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="status-display" onClick={() => setEditingStatus(true)}>
+                                <span className="status-emoji">{status.emoji || '😊'}</span>
+                                <span className="status-text">{status.text || 'Set your status...'}</span>
+                                <span className="edit-icon">✏️</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Bio */}
+                    <div className="about-item">
+                        <label>Bio</label>
+                        {editingBio ? (
+                            <div className="bio-editor">
+                                <textarea
+                                    value={bio}
+                                    onChange={(e) => setBio(e.target.value)}
+                                    placeholder="Tell people about yourself..."
+                                    maxLength={150}
+                                    rows={3}
+                                />
+                                <div className="char-count">{bio.length}/150</div>
+                                <div className="edit-actions">
+                                    <button onClick={handleSaveBio}>Save</button>
+                                    <button onClick={() => setEditingBio(false)}>Cancel</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bio-display" onClick={() => setEditingBio(true)}>
+                                <span>{bio || 'Add a bio...'}</span>
+                                <span className="edit-icon">✏️</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <div className="profile-section">
                     <h2>Appearance</h2>
                     <div className="theme-toggle-row">
@@ -186,6 +295,19 @@ export default function Profile() {
                         >
                             <span className="toggle-slider" />
                         </button>
+                    </div>
+                </div>
+
+                {/* Privacy Section */}
+                <div className="profile-section">
+                    <h2>Privacy</h2>
+                    <div className="privacy-item" onClick={() => setShowBlockedUsers(true)}>
+                        <span className="privacy-icon">🚫</span>
+                        <div className="privacy-info">
+                            <strong>Blocked Users</strong>
+                            <p>Manage your blocked users list</p>
+                        </div>
+                        <span className="privacy-arrow">→</span>
                     </div>
                 </div>
 
@@ -227,6 +349,12 @@ export default function Profile() {
                     </button>
                 </div>
             </div>
+
+            {/* Blocked Users Modal */}
+            {showBlockedUsers && (
+                <BlockedUsers onClose={() => setShowBlockedUsers(false)} />
+            )}
         </div>
     );
 }
+
