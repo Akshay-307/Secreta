@@ -94,6 +94,30 @@ const messageSchema = new mongoose.Schema({
             ciphertext: String
         }
     },
+    // File attachment support
+    fileAttachment: {
+        fileId: String,          // GridFS file ID
+        fileName: String,        // Original filename
+        fileSize: Number,        // Size in bytes  
+        mimeType: String,        // MIME type
+        // Encrypted file metadata (for secure filename etc)
+        encryptedMetadata: {
+            ephemeralPublicKey: Object,
+            iv: String,
+            ciphertext: String
+        }
+    },
+    // Message type: 'text', 'file', 'voice', 'image'
+    messageType: {
+        type: String,
+        enum: ['text', 'file', 'voice', 'image'],
+        default: 'text'
+    },
+    // Voice message specific fields
+    voiceDuration: {
+        type: Number,
+        default: null
+    },
     // Disappearing messages support
     isEphemeral: {
         type: Boolean,

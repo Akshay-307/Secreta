@@ -44,7 +44,8 @@ export default function ChatWindow({
     showBackButton,
     onReact,
     currentUserId,
-    socket
+    socket,
+    onDownloadFile // Add download handler prop
 }) {
     const [input, setInput] = useState('');
     const [typingTimeout, setTypingTimeout] = useState(null);
@@ -257,6 +258,7 @@ export default function ChatWindow({
                                     currentUserId={currentUserId}
                                     searchQuery={searchQuery}
                                     onReply={handleReply}
+                                    onDownloadFile={onDownloadFile}
                                     friendName={friend.username}
                                 />
                             ))}

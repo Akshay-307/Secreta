@@ -4,6 +4,8 @@
 
 import { useState, useRef } from 'react';
 import ReplyPreview from './ReplyPreview';
+import { FileMessage } from './FileAttachment';
+import { VoiceMessage } from './VoiceRecorder';
 import './MessageBubble.css';
 
 const EMOJI_OPTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
@@ -15,6 +17,7 @@ export default function MessageBubble({
     currentUserId,
     onReply,
     onScrollToMessage,
+    onDownloadFile,
     friendName
 }) {
     const [showPicker, setShowPicker] = useState(false);
@@ -99,6 +102,54 @@ export default function MessageBubble({
         }
     };
 
+    const handleFileDownload = async () => {
+        if (!message.fileAttachment || !onDownloadFile) return;
+        setIsDownloading(true);
+        try {
+            await onDownloadFile(message.fileAttachment);
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    // Render content based on message type
+    const renderMessageContent = () => {
+        const msgType = message.messageType || 'text';
+
+        switch (msgType) {
+            case 'file':
+            case 'image':
+                return message.fileAttachment ? (
+                    <FileMessage
+                        file={{
+                            name: message.fileAttachment.fileName,
+                            size: message.fileAttachment.fileSize,
+                            mimeType: message.fileAttachment.mimeType
+                        }}
+                        onDownload={handleFileDownload}
+                        isDownloading={isDownloading}
+                    />
+                ) : null;
+
+            case 'voice':
+                return (
+                    <VoiceMessage
+                        audioUrl={message.audioUrl}
+                        duration={message.voiceDuration || 0}
+                        waveformData={message.waveformData}
+                        isMine={isMine}
+                    />
+                );
+
+            default:
+                return (
+                    <div className="message-content">
+                        {renderContent(message.content)}
+                    </div>
+                );
+        }
+    };
+
     return (
         <div
             className={`message-bubble ${isMine ? 'mine' : 'theirs'}`}
@@ -127,9 +178,7 @@ export default function MessageBubble({
                 />
             )}
 
-            <div className="message-content">
-                {renderContent(message.content)}
-            </div>
+            {renderMessageContent()}
 
             {/* Reaction display */}
             {Object.keys(groupedReactions).length > 0 && (

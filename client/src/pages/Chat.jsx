@@ -12,6 +12,7 @@ import api from '../api/client';
 import { getSocket } from '../api/socket';
 import { encryptMessage, decryptMessage } from '../crypto/encryption';
 import { getStoredPublicKeyJwk } from '../crypto/keyManager';
+import { encryptFile, decryptFile, createDownloadBlob, downloadFile } from '../crypto/fileEncryption';
 import ChatList from '../components/ChatList';
 import ChatWindow from '../components/ChatWindow';
 import FriendSearch from '../components/FriendSearch';
@@ -179,6 +180,150 @@ export default function Chat() {
                 emoji,
                 recipientId: selectedFriend.id
             });
+        }
+    };
+
+    // Handle file upload and send
+    const handleSendFile = async (file) => {
+        if (!selectedFriend) return;
+        const socket = getSocket();
+        if (!socket) return;
+
+        try {
+            // Get keys
+            const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
+            const myPublicKey = await getStoredPublicKeyJwk();
+
+            // Encrypt file
+            const encryptedData = await encryptFile(file, recipientPublicKey, myPublicKey);
+
+            // Upload to server
+            // Create FormData
+            const formData = new FormData();
+            // Create blob from encrypted data
+            const encryptedBlob = new Blob([encryptedData.encryptedData]);
+            formData.append('file', encryptedBlob, 'encrypted');
+
+            // Add headers for friend verification
+            const response = await api.post('/files/upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    'x-recipient-id': selectedFriend.id
+                }
+            });
+
+            // Send message with file attachment metadata
+            socket.emit('send_message', {
+                recipientId: selectedFriend.id,
+                messageType: file.type.startsWith('image/') ? 'image' : 'file',
+                fileAttachment: {
+                    fileId: response.data.fileId,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    mimeType: file.type,
+                    encryptedMetadata: {
+                        ephemeralPublicKey: encryptedData.ephemeralPublicKey,
+                        iv: btoa(String.fromCharCode(...encryptedData.iv)),
+                        ciphertext: '' // Metadata is usually just the file content encryption info
+                    }
+                }
+            }, (response) => {
+                if (response.error) {
+                    console.error('Send file failed:', response.error);
+                    return;
+                }
+                setMessages(prev => [...prev, response.message]);
+            });
+
+        } catch (error) {
+            console.error('Failed to send file:', error);
+            // Show error notification
+        }
+    };
+
+    // Handle voice message
+    const handleSendVoice = async (voiceData) => {
+        if (!selectedFriend) return;
+        const socket = getSocket();
+        if (!socket) return;
+
+        try {
+            const { blob, duration, waveformData } = voiceData;
+
+            // Get keys
+            const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
+            const myPublicKey = await getStoredPublicKeyJwk();
+
+            // Encrypt audio blob
+            const encryptedData = await encryptFile(blob, recipientPublicKey, myPublicKey);
+
+            // Upload
+            const formData = new FormData();
+            const encryptedBlob = new Blob([encryptedData.encryptedData]);
+            formData.append('file', encryptedBlob, 'voice.webm');
+
+            const response = await api.post('/files/upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    'x-recipient-id': selectedFriend.id
+                }
+            });
+
+            // Send message
+            socket.emit('send_message', {
+                recipientId: selectedFriend.id,
+                messageType: 'voice',
+                voiceDuration: duration,
+                waveformData: waveformData,
+                fileAttachment: {
+                    fileId: response.data.fileId,
+                    fileName: 'Voice Message',
+                    fileSize: blob.size,
+                    mimeType: 'audio/webm',
+                    encryptedMetadata: {
+                        ephemeralPublicKey: encryptedData.ephemeralPublicKey,
+                        iv: btoa(String.fromCharCode(...encryptedData.iv)),
+                        ciphertext: ''
+                    }
+                }
+            }, (response) => {
+                if (response.error) {
+                    console.error('Send voice failed:', response.error);
+                    return;
+                }
+                setMessages(prev => [...prev, response.message]);
+            });
+
+        } catch (error) {
+            console.error('Failed to send voice message:', error);
+        }
+    };
+
+    // Handle file download
+    const handleDownloadFile = async (fileAttachment) => {
+        try {
+            const { fileId, encryptedMetadata, mimeType, fileName } = fileAttachment;
+
+            // Download encrypted blob
+            const response = await api.get(`/files/${fileId}`, {
+                responseType: 'arraybuffer'
+            });
+
+            // Decrypt
+            const iv = Uint8Array.from(atob(encryptedMetadata.iv), c => c.charCodeAt(0));
+
+            const decryptedData = await decryptFile(
+                response.data,
+                encryptedMetadata.ephemeralPublicKey,
+                iv
+            );
+
+            // Create download
+            const blob = createDownloadBlob(decryptedData, mimeType);
+            downloadFile(blob, fileName);
+
+        } catch (error) {
+            console.error('Failed to download file:', error);
         }
     };
 
@@ -355,6 +500,10 @@ export default function Chat() {
                         friend={selectedFriend}
                         messages={messages}
                         onSendMessage={sendMessage}
+                        onSendFile={handleSendFile}
+                        onSendVoice={handleSendVoice}
+                        onDownloadFile={handleDownloadFile}
+                        socket={getSocket()}
                         onTyping={handleTyping}
                         isTyping={typingUsers.has(selectedFriend.id)}
                         isOnline={onlineUsers.has(selectedFriend.id)}
