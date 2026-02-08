@@ -27,6 +27,11 @@ export async function getIceServers() {
                 const iceServers = await response.json();
                 console.log('✓ Metered TURN servers configured');
                 return iceServers;
+            } else {
+                console.warn(`✗ Metered API failed: ${response.status} ${response.statusText}`);
+                if (response.status === 401) {
+                    console.error('Check your VITE_METERED_API_KEY and VITE_METERED_DOMAIN in Vercel settings.');
+                }
             }
         }
 

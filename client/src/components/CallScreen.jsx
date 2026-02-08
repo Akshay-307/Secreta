@@ -286,7 +286,12 @@ export default function CallScreen({
                         {callStatus === 'incoming' && 'Incoming call'}
                         {callStatus === 'connecting' && 'Connecting...'}
                         {callStatus === 'connected' && formatTime(duration)}
-                        {callStatus === 'error' && 'Call failed'}
+                        {callStatus === 'error' && (
+                            <div className="error-status">
+                                💔 Connection failed
+                                <span className="error-hint">Check firewall or using fallback servers</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
