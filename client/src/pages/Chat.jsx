@@ -297,21 +297,25 @@ export default function Chat() {
             });
 
             // Send message
+            const encryptionMetadata = {
+                ephemeralPublicKey: encryptedData.ephemeralPublicKey,
+                iv: btoa(String.fromCharCode(...encryptedData.iv)),
+                ciphertext: 'VOICE' // Placeholder
+            };
+
             socket.emit('send_message', {
                 recipientId: selectedFriend.id,
                 messageType: 'voice',
                 voiceDuration: duration,
                 waveformData: waveformData,
+                encryptedForRecipient: encryptionMetadata,
+                encryptedForSender: encryptionMetadata,
                 fileAttachment: {
                     fileId: response.data.fileId,
                     fileName: 'Voice Message',
                     fileSize: blob.size,
                     mimeType: 'audio/webm',
-                    encryptedMetadata: {
-                        ephemeralPublicKey: encryptedData.ephemeralPublicKey,
-                        iv: btoa(String.fromCharCode(...encryptedData.iv)),
-                        ciphertext: ''
-                    }
+                    encryptedMetadata: encryptionMetadata
                 }
             }, (response) => {
                 if (response.error) {
