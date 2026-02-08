@@ -88,7 +88,11 @@ export default function Chat() {
                         if (!msg.messageType || msg.messageType === 'text') {
                             decryptedContent = await decryptMessage(encryptedData);
                         } else {
-                            decryptedContent = msg.messageType === 'image' ? '📷 Image' : '📎 File';
+                            if (msg.messageType === 'voice') {
+                                decryptedContent = '🎤 Voice Message';
+                            } else {
+                                decryptedContent = msg.messageType === 'image' ? '📷 Image' : '📎 File';
+                            }
                         }
 
                         return { ...msg, content: decryptedContent };
@@ -374,8 +378,12 @@ export default function Chat() {
                     const encryptedData = message.encryptedForRecipient || message.encrypted;
                     decryptedContent = await decryptMessage(encryptedData);
                 } else {
-                    // For files, content is just a label/placeholder
-                    decryptedContent = message.messageType === 'image' ? '📷 Image' : '📎 File';
+                    // For files/voice, content is just a label/placeholder
+                    if (message.messageType === 'voice') {
+                        decryptedContent = '🎤 Voice Message';
+                    } else {
+                        decryptedContent = message.messageType === 'image' ? '📷 Image' : '📎 File';
+                    }
                 }
 
                 const decryptedMessage = { ...message, content: decryptedContent };
