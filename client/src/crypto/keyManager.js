@@ -167,6 +167,16 @@ export async function getStoredKeyPair() {
 }
 
 /**
+ * Get stored private key (for decryption)
+ * 
+ * @returns {Promise<CryptoKey | null>}
+ */
+export async function getPrivateKey() {
+    const keyPair = await getStoredKeyPair();
+    return keyPair ? keyPair.privateKey : null;
+}
+
+/**
  * Get stored public key as JWK (for sending to server)
  * 
  * @returns {Promise<JsonWebKey | null>}
