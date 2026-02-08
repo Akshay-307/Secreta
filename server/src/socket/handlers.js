@@ -108,7 +108,7 @@ export const setupSocketHandlers = (io) => {
                 await message.save();
 
                 // Prepare message for delivery
-                const messageData = {
+                const responsePayload = {
                     _id: message._id,
                     senderId: userId,
                     recipientId,
@@ -117,6 +117,10 @@ export const setupSocketHandlers = (io) => {
                     encrypted: message.encryptedForRecipient, // Legacy support
                     replyTo: message.replyTo,
                     replyPreview: message.replyPreview,
+                    fileAttachment: message.fileAttachment, // Added file attachment
+                    messageType: message.messageType,       // Added message type
+                    voiceDuration: message.voiceDuration,   // Added voice duration
+                    voiceWaveform: message.voiceWaveform,   // Added voice waveform
                     createdAt: message.createdAt,
                     delivered: false,
                     read: false
@@ -126,17 +130,17 @@ export const setupSocketHandlers = (io) => {
                 const recipientSockets = userSockets.get(recipientId);
                 if (recipientSockets && recipientSockets.size > 0) {
                     recipientSockets.forEach(socketId => {
-                        io.to(socketId).emit('new_message', messageData);
+                        io.to(socketId).emit('new_message', responsePayload);
                     });
 
                     // Mark as delivered
                     message.delivered = true;
                     await message.save();
-                    messageData.delivered = true;
+                    responsePayload.delivered = true;
                 }
 
                 // Confirm to sender
-                callback({ success: true, message: messageData });
+                callback({ success: true, message: responsePayload });
             } catch (error) {
                 console.error('Send message error:', error);
                 callback({ error: 'Failed to send message' });
