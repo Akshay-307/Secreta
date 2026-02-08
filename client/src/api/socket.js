@@ -6,7 +6,17 @@
 
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+// Helper to get socket URL from env
+const getSocketUrl = () => {
+    if (import.meta.env.VITE_SOCKET_URL) {
+        return import.meta.env.VITE_SOCKET_URL;
+    }
+    // Fallback to API URL but remove /api suffix if present
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    return apiUrl.replace(/\/api\/?$/, '');
+};
+
+const SOCKET_URL = getSocketUrl();
 
 let socket = null;
 

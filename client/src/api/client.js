@@ -7,7 +7,18 @@
 
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Helper to get API URL
+const getApiUrl = () => {
+    let url = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    // Ensure it ends with /api if not present (unless it's just the domain, then append /api)
+    // Heuristic: if it doesn't end in /api, append it.
+    if (!url.endsWith('/api') && !url.endsWith('/api/')) {
+        url = `${url.replace(/\/$/, '')}/api`;
+    }
+    return url;
+};
+
+const API_URL = getApiUrl();
 
 const api = axios.create({
     baseURL: API_URL,
