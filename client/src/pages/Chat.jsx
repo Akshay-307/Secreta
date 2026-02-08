@@ -61,63 +61,74 @@ export default function Chat() {
             const response = await api.get(`/messages/${friendId}`);
 
             // Decrypt all messages
-            const decryptedMessages = await Promise.all(
-                response.data.map(async (msg) => {
-                    try {
-                        // Determine if this is a message I sent or received
-                        const isMine = msg.senderId !== friendId;
+            // Optimized decryption with voice support
+            const decryptedMessages = await Promise.all(response.data.map(async (msg) => {
+                try {
+                    const isMine = msg.senderId !== friendId;
+                    let encryptedData;
 
-                        // Use the appropriate encrypted version
-                        // For messages I sent, use encryptedForSender
-                        // For messages I received, use encryptedForRecipient (or legacy encrypted)
-                        let encryptedData;
-                        if (isMine && msg.encryptedForSender) {
-                            encryptedData = msg.encryptedForSender;
-                        } else if (!isMine && msg.encryptedForRecipient) {
-                            encryptedData = msg.encryptedForRecipient;
-                        } else {
-                            // Fallback to legacy encrypted field
-                            encryptedData = msg.encrypted;
-                        }
-
-                        if (!encryptedData || !encryptedData.ephemeralPublicKey) {
-                            return { ...msg, content: '[No encryption data]' };
-                        }
-
-                        let decryptedContent = '';
-
-                        // Check for legacy placeholder messages (fixes "data too small" errors)
-                        const ciphertext = encryptedData?.ciphertext;
-                        const isPlaceholder = ciphertext === 'FILE' || ciphertext === 'VOICE' || ciphertext === '' || (ciphertext && ciphertext.length < 24);
-
-                        if (!msg.messageType) {
-                            if (isPlaceholder) {
-                                decryptedContent = '📎 Attachment';
-                            } else {
-                                decryptedContent = await decryptMessage(encryptedData);
-                            }
-                        } else if (msg.messageType === 'text') {
-                            decryptedContent = await decryptMessage(encryptedData);
-                        } else {
-                            if (msg.messageType === 'voice') {
-                                decryptedContent = '🎤 Voice Message';
-                            } else {
-                                decryptedContent = msg.messageType === 'image' ? '📷 Image' : '📎 File';
-                            }
-                        }
-
-                        return { ...msg, content: decryptedContent };
-                    } catch (error) {
-                        // Suppress expected errors for legacy/broken messages
-                        if (error.name === 'OperationError' || error.name === 'InvalidCharacterError') {
-                            console.warn('Skipping unreadable message:', msg._id);
-                            return { ...msg, content: '🔒 Unreadable' };
-                        }
-                        console.error('Failed to decrypt message:', error);
-                        return { ...msg, content: '[Unable to decrypt]' };
+                    if (isMine && msg.encryptedForSender) {
+                        encryptedData = msg.encryptedForSender;
+                    } else if (!isMine && msg.encryptedForRecipient) {
+                        encryptedData = msg.encryptedForRecipient;
+                    } else {
+                        encryptedData = msg.encrypted;
                     }
-                })
-            );
+
+                    if (!encryptedData || !encryptedData.ephemeralPublicKey) {
+                        return { ...msg, content: '[No encryption data]' };
+                    }
+
+                    let decryptedContent = '';
+                    let audioUrl = null;
+
+                    const ciphertext = encryptedData?.ciphertext;
+                    const isPlaceholder = ciphertext === 'FILE' || ciphertext === 'VOICE' || ciphertext === '' || (ciphertext && ciphertext.length < 24);
+
+                    if (msg.messageType === 'voice' && msg.fileAttachment) {
+                        // Auto-fetch audio data for voice messages
+                        try {
+                            const fileResponse = await api.get(`/files/${msg.fileAttachment.fileId}`, {
+                                responseType: 'arraybuffer'
+                            });
+
+                            // Decrypt audio
+                            const iv = Uint8Array.from(atob(msg.fileAttachment.encryptedMetadata.iv), c => c.charCodeAt(0));
+                            const decryptedAudio = await decryptFile(
+                                fileResponse.data,
+                                msg.fileAttachment.encryptedMetadata.ephemeralPublicKey,
+                                iv
+                            );
+
+                            const blob = new Blob([decryptedAudio], { type: 'audio/webm' });
+                            audioUrl = URL.createObjectURL(blob);
+                            decryptedContent = '🎤 Voice Message';
+                        } catch (err) {
+                            console.error('Failed to load voice message:', err);
+                            decryptedContent = '⚠️ Voice Message Failed';
+                        }
+                    } else if (!msg.messageType) {
+                        if (isPlaceholder) {
+                            decryptedContent = '📎 Attachment';
+                        } else {
+                            decryptedContent = await decryptMessage(encryptedData);
+                        }
+                    } else if (msg.messageType === 'text') {
+                        decryptedContent = await decryptMessage(encryptedData);
+                    } else {
+                        decryptedContent = msg.messageType === 'image' ? '📷 Image' : '📎 File';
+                    }
+
+                    return { ...msg, content: decryptedContent, audioUrl };
+                } catch (error) {
+                    if (error.name === 'OperationError' || error.name === 'InvalidCharacterError') {
+                        return { ...msg, content: '🔒 Unreadable' };
+                    }
+                    console.error('Failed to decrypt message:', error);
+                    return { ...msg, content: '[Unable to decrypt]' };
+                }
+            }));
+
 
             setMessages(decryptedMessages);
 
@@ -165,10 +176,28 @@ export default function Chat() {
                 ? await encryptMessage(content, myPublicKey)
                 : null;
 
+            // Handle Reply
+            let replyData = {};
+            if (replyingTo) {
+                const previewContent = replyingTo.content.substring(0, 50);
+
+                // Encrypt preview for recipient
+                const encryptedPreview = await encryptMessage(previewContent, recipientPublicKey);
+
+                replyData = {
+                    replyTo: replyingTo._id,
+                    replyPreview: {
+                        senderId: replyingTo.senderId,
+                        encryptedPreview
+                    }
+                };
+            }
+
             socket.emit('send_message', {
                 recipientId: selectedFriend.id,
                 encryptedForRecipient,
-                encryptedForSender
+                encryptedForSender,
+                ...replyData
             }, (response) => {
                 if (response.error) {
                     console.error('Send failed:', response.error);
@@ -180,6 +209,9 @@ export default function Chat() {
                     ...response.message,
                     content
                 }]);
+
+                // Clear reply state
+                setReplyingTo(null);
             });
         } catch (error) {
             console.error('Failed to send message:', error);
@@ -387,13 +419,35 @@ export default function Chat() {
         const handleNewMessage = async (message) => {
             try {
                 let decryptedContent = '';
+                let audioUrl = null;
 
                 // Check for legacy placeholder messages
                 const ciphertext = message.encryptedForRecipient?.ciphertext || message.encrypted?.ciphertext;
                 const isPlaceholder = ciphertext === 'FILE' || ciphertext === 'VOICE' || ciphertext === '' || (ciphertext && ciphertext.length < 24);
 
-                // If it's a text message, decrypt content
-                if (!message.messageType) {
+                if (message.messageType === 'voice' && message.fileAttachment) {
+                    // Auto-fetch audio data for voice messages
+                    try {
+                        const fileResponse = await api.get(`/files/${message.fileAttachment.fileId}`, {
+                            responseType: 'arraybuffer'
+                        });
+
+                        // Decrypt audio
+                        const iv = Uint8Array.from(atob(message.fileAttachment.encryptedMetadata.iv), c => c.charCodeAt(0));
+                        const decryptedAudio = await decryptFile(
+                            fileResponse.data,
+                            message.fileAttachment.encryptedMetadata.ephemeralPublicKey,
+                            iv
+                        );
+
+                        const blob = new Blob([decryptedAudio], { type: 'audio/webm' });
+                        audioUrl = URL.createObjectURL(blob);
+                        decryptedContent = '🎤 Voice Message';
+                    } catch (err) {
+                        console.error('Failed to load voice message:', err);
+                        decryptedContent = '⚠️ Voice Message Failed';
+                    }
+                } else if (!message.messageType) {
                     if (isPlaceholder) {
                         decryptedContent = '📎 Attachment';
                     } else {
@@ -405,14 +459,10 @@ export default function Chat() {
                     decryptedContent = await decryptMessage(encryptedData);
                 } else {
                     // For files/voice, content is just a label/placeholder
-                    if (message.messageType === 'voice') {
-                        decryptedContent = '🎤 Voice Message';
-                    } else {
-                        decryptedContent = message.messageType === 'image' ? '📷 Image' : '📎 File';
-                    }
+                    decryptedContent = message.messageType === 'image' ? '📷 Image' : '📎 File';
                 }
 
-                const decryptedMessage = { ...message, content: decryptedContent };
+                const decryptedMessage = { ...message, content: decryptedContent, audioUrl };
 
                 setMessages(prev => {
                     // Only add if this is for current conversation
