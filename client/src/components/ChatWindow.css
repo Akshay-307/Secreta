@@ -108,17 +108,19 @@
 .header-action-btn {
     background: transparent;
     border: none;
+    color: var(--text-primary);
     font-size: 1.125rem;
     padding: 0.5rem;
     cursor: pointer;
     border-radius: 50%;
     transition: all 0.2s ease;
-    opacity: 0.6;
+    opacity: 0.7;
 }
 
 .header-action-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     opacity: 1;
+    color: white;
 }
 
 .search-toggle {
@@ -295,6 +297,7 @@
     border: none;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
     font-size: 1.25rem;
     cursor: pointer;
     display: flex;
@@ -307,6 +310,7 @@
 .input-action-btn:hover,
 .voice-btn:hover {
     background: rgba(255, 255, 255, 0.12);
+    color: white;
 }
 
 @media (max-width: 480px) {
