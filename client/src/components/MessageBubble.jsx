@@ -22,6 +22,7 @@ export default function MessageBubble({
 }) {
     const [showPicker, setShowPicker] = useState(false);
     const [swipeOffset, setSwipeOffset] = useState(0);
+    const [isDownloading, setIsDownloading] = useState(false);
     const touchStartX = useRef(0);
 
     const formatTime = (date) => {
