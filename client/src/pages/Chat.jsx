@@ -34,6 +34,7 @@ export default function Chat() {
     const [showRequests, setShowRequests] = useState(false);
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
+    const [replyingTo, setReplyingTo] = useState(null);
 
     // Fetch friends list
     const fetchFriends = useCallback(async () => {
@@ -686,6 +687,8 @@ export default function Chat() {
                         showBackButton={isMobileView}
                         onReact={handleReact}
                         currentUserId={user?.id}
+                        replyingTo={replyingTo}
+                        setReplyingTo={setReplyingTo}
                     />
                 ) : (
                     <div className="no-chat-selected">

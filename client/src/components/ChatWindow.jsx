@@ -45,7 +45,9 @@ export default function ChatWindow({
     onReact,
     currentUserId,
     socket,
-    onDownloadFile // Add download handler prop
+    onDownloadFile, // Add download handler prop
+    replyingTo,
+    setReplyingTo
 }) {
     const [input, setInput] = useState('');
     const [typingTimeout, setTypingTimeout] = useState(null);
@@ -53,7 +55,7 @@ export default function ChatWindow({
     const [showSearch, setShowSearch] = useState(false);
     const [wallpaper, setWallpaper] = useState(PRESET_WALLPAPERS[0]);
     const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
-    const [replyingTo, setReplyingTo] = useState(null);
+    // replyingTo state lifted to parent
     const [showFileAttachment, setShowFileAttachment] = useState(false);
     const [isRecordingVoice, setIsRecordingVoice] = useState(false);
     const [activeCall, setActiveCall] = useState(null); // { isVideo: boolean, isIncoming: boolean }
