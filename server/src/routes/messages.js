@@ -31,12 +31,13 @@ router.get('/:friendId', async (req, res) => {
             return res.status(403).json({ error: 'Not friends with this user' });
         }
 
-        // Build query
+        // Build query - exclude messages deleted by this user
         const query = {
             $or: [
                 { senderId: userId, recipientId: friendId },
                 { senderId: friendId, recipientId: userId }
-            ]
+            ],
+            deletedFor: { $ne: userId }
         };
 
         if (before) {

@@ -326,6 +326,45 @@
     transform: scale(1.05);
 }
 
+/* Disappear mode toggle */
+.disappear-toggle {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.disappear-toggle:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: scale(1.1);
+}
+
+.disappear-toggle.default {
+    border: 2px solid rgba(102, 126, 234, 0.4);
+}
+
+.disappear-toggle.view_once {
+    border: 2px solid rgba(234, 179, 8, 0.5);
+    background: rgba(234, 179, 8, 0.08);
+}
+
+.disappear-toggle.off {
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    opacity: 0.5;
+}
+
+.disappear-toggle-icon {
+    font-size: 0.95rem;
+}
+
 @media (max-width: 480px) {
     .chat-header {
         padding: 0.75rem 1rem;

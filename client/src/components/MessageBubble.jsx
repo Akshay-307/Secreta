@@ -1,5 +1,6 @@
 /**
  * Message Bubble Component
+ * With context menu for copy/delete, swipe-to-reply, emoji reactions
  */
 
 import { useState, useRef } from 'react';
@@ -18,12 +19,18 @@ export default function MessageBubble({
     onReply,
     onScrollToMessage,
     onDownloadFile,
+    onDeleteMessage,
     friendName
 }) {
     const [showPicker, setShowPicker] = useState(false);
+    const [showContextMenu, setShowContextMenu] = useState(false);
+    const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
     const [swipeOffset, setSwipeOffset] = useState(0);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const touchStartX = useRef(0);
+    const longPressTimer = useRef(null);
+    const bubbleRef = useRef(null);
 
     const formatTime = (date) => {
         return new Date(date).toLocaleTimeString([], {
@@ -35,26 +42,69 @@ export default function MessageBubble({
     const handleReaction = (emoji) => {
         onReact?.(message._id, emoji);
         setShowPicker(false);
+        setShowContextMenu(false);
     };
 
     // Handle swipe to reply
     const handleTouchStart = (e) => {
         touchStartX.current = e.touches[0].clientX;
+        // Long press for context menu on mobile
+        longPressTimer.current = setTimeout(() => {
+            const touch = e.touches[0];
+            setContextPos({ x: touch.clientX, y: touch.clientY });
+            setShowContextMenu(true);
+        }, 500);
     };
 
     const handleTouchMove = (e) => {
+        // Cancel long press if finger moves
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
         const diff = e.touches[0].clientX - touchStartX.current;
-        // Only allow swipe right for reply
         if (diff > 0 && diff < 80) {
             setSwipeOffset(diff);
         }
     };
 
     const handleTouchEnd = () => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
         if (swipeOffset > 50) {
             onReply?.(message);
         }
         setSwipeOffset(0);
+    };
+
+    // Right-click context menu
+    const handleContextMenu = (e) => {
+        e.preventDefault();
+        setContextPos({ x: e.clientX, y: e.clientY });
+        setShowContextMenu(true);
+    };
+
+    // Copy message
+    const handleCopy = async () => {
+        if (message.content) {
+            await navigator.clipboard.writeText(message.content);
+        }
+        setShowContextMenu(false);
+    };
+
+    // Delete message
+    const handleDelete = async () => {
+        setIsDeleting(true);
+        setShowContextMenu(false);
+        onDeleteMessage?.(message._id);
+    };
+
+    // Close context menu when clicking elsewhere
+    const handleOverlayClick = () => {
+        setShowContextMenu(false);
+        setShowPicker(false);
     };
 
     // Group reactions by emoji with count
@@ -152,74 +202,121 @@ export default function MessageBubble({
         }
     };
 
+    // Disappear mode indicator
+    const getDisappearIcon = () => {
+        if (message.disappearMode === 'view_once') return '👁️';
+        if (message.disappearMode === 'default' || !message.disappearMode) return '⏳';
+        return null;
+    };
+
     return (
-        <div
-            className={`message-bubble ${isMine ? 'mine' : 'theirs'}`}
-            style={{ transform: `translateX(${swipeOffset}px)` }}
-            onDoubleClick={() => setShowPicker(!showPicker)}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-        >
-            {/* Reply indicator on swipe */}
-            {swipeOffset > 20 && (
-                <div className="swipe-reply-indicator" style={{ opacity: swipeOffset / 60 }}>
-                    ↩️
-                </div>
-            )}
-
-            {/* Reply preview if this is a reply */}
-            {message.replyPreview && (
-                <ReplyPreview
-                    preview={{
-                        senderName: message.replyPreview.senderId === currentUserId ? 'You' : friendName,
-                        content: message.replyPreview.content
-                    }}
-                    isMine={isMine}
-                    onClick={handleReplyClick}
-                />
-            )}
-
-            {renderMessageContent()}
-
-            {/* Reaction display */}
-            {Object.keys(groupedReactions).length > 0 && (
-                <div className="message-reactions">
-                    {Object.entries(groupedReactions).map(([emoji, count]) => (
-                        <span
-                            key={emoji}
-                            className={`reaction-badge ${userReacted(emoji) ? 'my-reaction' : ''}`}
-                            onClick={() => handleReaction(emoji)}
-                        >
-                            {emoji} {count > 1 && count}
-                        </span>
-                    ))}
-                </div>
-            )}
-
-            {/* Reaction picker */}
-            {showPicker && (
-                <div className="reaction-picker">
-                    {EMOJI_OPTIONS.map(emoji => (
-                        <button key={emoji} onClick={() => handleReaction(emoji)}>
-                            {emoji}
-                        </button>
-                    ))}
-                    <button onClick={() => { onReply?.(message); setShowPicker(false); }}>
+        <>
+            <div
+                ref={bubbleRef}
+                className={`message-bubble ${isMine ? 'mine' : 'theirs'} ${isDeleting ? 'deleting' : ''}`}
+                style={{ transform: `translateX(${swipeOffset}px)` }}
+                onDoubleClick={() => setShowPicker(!showPicker)}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onContextMenu={handleContextMenu}
+            >
+                {/* Reply indicator on swipe */}
+                {swipeOffset > 20 && (
+                    <div className="swipe-reply-indicator" style={{ opacity: swipeOffset / 60 }}>
                         ↩️
-                    </button>
+                    </div>
+                )}
+
+                {/* Reply preview if this is a reply */}
+                {message.replyPreview && (
+                    <ReplyPreview
+                        preview={{
+                            senderName: message.replyPreview.senderId === currentUserId ? 'You' : friendName,
+                            content: message.replyPreview.content
+                        }}
+                        isMine={isMine}
+                        onClick={handleReplyClick}
+                    />
+                )}
+
+                {renderMessageContent()}
+
+                {/* Reaction display */}
+                {Object.keys(groupedReactions).length > 0 && (
+                    <div className="message-reactions">
+                        {Object.entries(groupedReactions).map(([emoji, count]) => (
+                            <span
+                                key={emoji}
+                                className={`reaction-badge ${userReacted(emoji) ? 'my-reaction' : ''}`}
+                                onClick={() => handleReaction(emoji)}
+                            >
+                                {emoji} {count > 1 && count}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {/* Reaction picker */}
+                {showPicker && (
+                    <div className="reaction-picker">
+                        {EMOJI_OPTIONS.map(emoji => (
+                            <button key={emoji} onClick={() => handleReaction(emoji)}>
+                                {emoji}
+                            </button>
+                        ))}
+                        <button onClick={() => { onReply?.(message); setShowPicker(false); }}>
+                            ↩️
+                        </button>
+                    </div>
+                )}
+
+                <div className="message-meta">
+                    {getDisappearIcon() && (
+                        <span className="disappear-icon">{getDisappearIcon()}</span>
+                    )}
+                    <span className="message-time">{formatTime(message.createdAt)}</span>
+                    {isMine && (
+                        <span className={`message-status ${message.read ? 'read' : ''}`}>
+                            {message.read ? '✓✓' : message.delivered ? '✓' : '○'}
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* Context Menu */}
+            {showContextMenu && (
+                <div className="context-menu-overlay" onClick={handleOverlayClick}>
+                    <div
+                        className="context-menu"
+                        style={{
+                            top: Math.min(contextPos.y, window.innerHeight - 200),
+                            left: Math.min(contextPos.x, window.innerWidth - 180)
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {message.messageType === 'text' && (
+                            <button className="context-menu-item" onClick={handleCopy}>
+                                <span className="context-icon">📋</span>
+                                Copy
+                            </button>
+                        )}
+                        <button className="context-menu-item" onClick={() => { onReply?.(message); setShowContextMenu(false); }}>
+                            <span className="context-icon">↩️</span>
+                            Reply
+                        </button>
+                        <button className="context-menu-item" onClick={() => { setShowPicker(true); setShowContextMenu(false); }}>
+                            <span className="context-icon">😄</span>
+                            React
+                        </button>
+                        <div className="context-menu-divider" />
+                        <button className="context-menu-item danger" onClick={handleDelete}>
+                            <span className="context-icon">🗑️</span>
+                            Delete for me
+                        </button>
+                    </div>
                 </div>
             )}
-
-            <div className="message-meta">
-                <span className="message-time">{formatTime(message.createdAt)}</span>
-                {isMine && (
-                    <span className="message-status">
-                        {message.read ? '✓✓' : message.delivered ? '✓' : '○'}
-                    </span>
-                )}
-            </div>
-        </div>
+        </>
     );
 }
-

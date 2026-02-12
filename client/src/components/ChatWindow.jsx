@@ -1,10 +1,11 @@
 /**
  * Chat Window Component
  * 
- * The main message area with header, messages, and input
+ * The main message area with header, messages, input,
+ * date separators, and animated typing indicator
  */
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
 import WallpaperPicker from './WallpaperPicker';
 import FileAttachment from './FileAttachment';
@@ -31,6 +32,32 @@ function formatLastSeen(lastSeen) {
     return seen.toLocaleDateString();
 }
 
+// Format date for separators
+function formatDateSeparator(date) {
+    const msgDate = new Date(date);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const msgDay = new Date(msgDate.getFullYear(), msgDate.getMonth(), msgDate.getDate());
+
+    if (msgDay.getTime() === today.getTime()) return 'Today';
+    if (msgDay.getTime() === yesterday.getTime()) return 'Yesterday';
+    return msgDate.toLocaleDateString(undefined, {
+        weekday: 'long', month: 'short', day: 'numeric'
+    });
+}
+
+// Check if two dates are on different days
+function isDifferentDay(date1, date2) {
+    if (!date1 || !date2) return true;
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    return d1.getDate() !== d2.getDate() ||
+        d1.getMonth() !== d2.getMonth() ||
+        d1.getFullYear() !== d2.getFullYear();
+}
+
 export default function ChatWindow({
     friend,
     messages,
@@ -45,7 +72,8 @@ export default function ChatWindow({
     onReact,
     currentUserId,
     socket,
-    onDownloadFile, // Add download handler prop
+    onDownloadFile,
+    onDeleteMessage,
     replyingTo,
     setReplyingTo
 }) {
@@ -55,10 +83,10 @@ export default function ChatWindow({
     const [showSearch, setShowSearch] = useState(false);
     const [wallpaper, setWallpaper] = useState(PRESET_WALLPAPERS[0]);
     const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
-    // replyingTo state lifted to parent
     const [showFileAttachment, setShowFileAttachment] = useState(false);
     const [isRecordingVoice, setIsRecordingVoice] = useState(false);
-    const [activeCall, setActiveCall] = useState(null); // { isVideo: boolean, isIncoming: boolean }
+    const [activeCall, setActiveCall] = useState(null);
+    const [disappearMode, setDisappearMode] = useState('default'); // 'default' | 'view_once' | 'off'
     const messagesEndRef = useRef(null);
 
     // Load wallpaper for this chat
@@ -87,11 +115,26 @@ export default function ChatWindow({
         return () => socket.off('call_offer', handleIncomingCall);
     }, [socket, friend?.id]);
 
+    // Cycle through disappear modes
+    const cycleDisappearMode = () => {
+        setDisappearMode(prev => {
+            if (prev === 'default') return 'view_once';
+            if (prev === 'view_once') return 'off';
+            return 'default';
+        });
+    };
+
+    const getDisappearLabel = () => {
+        if (disappearMode === 'default') return { icon: '⏳', label: '24hr' };
+        if (disappearMode === 'view_once') return { icon: '👁️', label: 'View once' };
+        return { icon: '♾️', label: 'Off' };
+    };
+
     const handleSend = (e) => {
         e.preventDefault();
         if (!input.trim()) return;
 
-        onSendMessage(input, replyingTo);
+        onSendMessage(input, replyingTo, disappearMode);
         setInput('');
         setReplyingTo(null);
         onTyping(false);
@@ -100,15 +143,12 @@ export default function ChatWindow({
     const handleInputChange = (e) => {
         setInput(e.target.value);
 
-        // Clear existing timeout
         if (typingTimeout) {
             clearTimeout(typingTimeout);
         }
 
-        // Notify typing
         onTyping(true);
 
-        // Set timeout to stop typing indicator
         const timeout = setTimeout(() => {
             onTyping(false);
         }, 2000);
@@ -153,6 +193,11 @@ export default function ChatWindow({
             return { backgroundColor: wallpaper.value };
         }
     };
+
+    // Filter messages based on search
+    const filteredMessages = searchQuery
+        ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
+        : messages;
 
     return (
         <div className="chat-window">
@@ -229,7 +274,7 @@ export default function ChatWindow({
                     />
                     {searchQuery && (
                         <span className="search-count">
-                            {messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase())).length} found
+                            {filteredMessages.length} found
                         </span>
                     )}
                 </div>
@@ -237,33 +282,56 @@ export default function ChatWindow({
 
             {/* Messages with wallpaper */}
             <div className="messages-container" style={getWallpaperStyle()}>
-                {messages.length === 0 ? (
+                {filteredMessages.length === 0 && !searchQuery ? (
                     <div className="no-messages">
                         <span className="encryption-badge">🔐</span>
                         <p>Messages are end-to-end encrypted</p>
                         <p className="encryption-hint">Only you and {friend.username} can read them</p>
+                        <p className="disappear-notice">⏳ Messages auto-delete after 24 hours</p>
                     </div>
                 ) : (
                     <>
                         <div className="encryption-notice">
                             <span>🔐</span>
-                            Messages are end-to-end encrypted
+                            Messages are end-to-end encrypted · ⏳ 24hr auto-delete
                         </div>
-                        {messages
-                            .filter(m => !searchQuery || m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
-                            .map((message, index) => (
-                                <MessageBubble
-                                    key={message._id || index}
-                                    message={message}
-                                    isMine={message.senderId !== friend.id}
-                                    onReact={onReact}
-                                    currentUserId={currentUserId}
-                                    searchQuery={searchQuery}
-                                    onReply={handleReply}
-                                    onDownloadFile={onDownloadFile}
-                                    friendName={friend.username}
-                                />
-                            ))}
+                        {filteredMessages.map((message, index) => {
+                            const showDateSeparator = index === 0 ||
+                                isDifferentDay(filteredMessages[index - 1]?.createdAt, message.createdAt);
+
+                            return (
+                                <React.Fragment key={message._id || index}>
+                                    {showDateSeparator && (
+                                        <div className="date-separator">
+                                            <span className="date-separator-label">
+                                                {formatDateSeparator(message.createdAt)}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <MessageBubble
+                                        message={message}
+                                        isMine={message.senderId !== friend.id}
+                                        onReact={onReact}
+                                        currentUserId={currentUserId}
+                                        searchQuery={searchQuery}
+                                        onReply={handleReply}
+                                        onDownloadFile={onDownloadFile}
+                                        onDeleteMessage={onDeleteMessage}
+                                        friendName={friend.username}
+                                    />
+                                </React.Fragment>
+                            );
+                        })}
+                        {/* Animated typing indicator */}
+                        {isTyping && (
+                            <div className="typing-indicator-wrapper">
+                                <div className="typing-dots">
+                                    <div className="typing-dot" />
+                                    <div className="typing-dot" />
+                                    <div className="typing-dot" />
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
                 <div ref={messagesEndRef} />
@@ -291,6 +359,14 @@ export default function ChatWindow({
                 />
             ) : (
                 <form className="message-input-form" onSubmit={handleSend}>
+                    <button
+                        type="button"
+                        className={`disappear-toggle ${disappearMode}`}
+                        onClick={cycleDisappearMode}
+                        title={`Disappear: ${getDisappearLabel().label} (click to change)`}
+                    >
+                        <span className="disappear-toggle-icon">{getDisappearLabel().icon}</span>
+                    </button>
                     <button
                         type="button"
                         className="input-action-btn"
@@ -356,5 +432,3 @@ export default function ChatWindow({
         </div>
     );
 }
-
-

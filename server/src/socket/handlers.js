@@ -92,9 +92,12 @@ export const setupSocketHandlers = (io) => {
                     // Reply support
                     replyTo: data.replyTo || null,
                     replyPreview: data.replyPreview || null,
-                    // Ephemeral (disappearing) messages - 24 hour expiration
-                    isEphemeral: !!data.isEphemeral,
-                    expiresAt: data.isEphemeral ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null,
+                    // Disappearing messages - default: 24hr, view_once: after read, off: permanent
+                    disappearMode: data.disappearMode || 'default',
+                    isEphemeral: (data.disappearMode || 'default') !== 'off',
+                    expiresAt: (data.disappearMode || 'default') === 'off'
+                        ? null
+                        : new Date(Date.now() + 24 * 60 * 60 * 1000),
                     // Keep legacy field for backward compatibility
                     encrypted: {
                         ephemeralPublicKey: forRecipient.ephemeralPublicKey,
@@ -132,7 +135,8 @@ export const setupSocketHandlers = (io) => {
                     voiceWaveform: message.voiceWaveform,   // Added voice waveform
                     createdAt: message.createdAt,
                     delivered: false,
-                    read: false
+                    read: false,
+                    disappearMode: message.disappearMode
                 };
 
                 // Send to recipient if online
@@ -254,8 +258,50 @@ export const setupSocketHandlers = (io) => {
                         });
                     });
                 }
+
+                // Auto-delete view_once messages after being read
+                await Message.deleteMany({
+                    _id: { $in: messageIds },
+                    disappearMode: 'view_once'
+                });
             } catch (error) {
                 console.error('Mark read error:', error);
+            }
+        });
+
+        /**
+         * Handle delete message (for me)
+         */
+        socket.on('delete_message', async (data, callback) => {
+            try {
+                const { messageId } = data;
+                const message = await Message.findById(messageId);
+                if (!message) {
+                    return callback?.({ error: 'Message not found' });
+                }
+
+                // Verify user is part of this conversation
+                if (message.senderId.toString() !== userId && message.recipientId.toString() !== userId) {
+                    return callback?.({ error: 'Unauthorized' });
+                }
+
+                // Add user to deletedFor array
+                if (!message.deletedFor) message.deletedFor = [];
+                if (!message.deletedFor.includes(userId)) {
+                    message.deletedFor.push(userId);
+                }
+
+                // If both users deleted, remove the message entirely
+                if (message.deletedFor.length >= 2) {
+                    await Message.findByIdAndDelete(messageId);
+                } else {
+                    await message.save();
+                }
+
+                callback?.({ success: true });
+            } catch (error) {
+                console.error('Delete message error:', error);
+                callback?.({ error: 'Failed to delete message' });
             }
         });
 

@@ -28,7 +28,9 @@ export default function Login() {
             navigate('/');
         } catch (err) {
             const errorData = err.response?.data;
-            setError(errorData?.error || 'Login failed');
+            const errorMessage = errorData?.error || 'Login failed';
+
+            setError(errorMessage);
 
             if (errorData?.requiresVerification) {
                 setShowResend(true);
@@ -113,3 +115,4 @@ export default function Login() {
         </div>
     );
 }
+

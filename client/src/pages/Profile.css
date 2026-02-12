@@ -9,6 +9,7 @@
     justify-content: center;
     padding: 2rem;
     position: relative;
+    overflow-y: auto;
 }
 
 .profile-page::before {
@@ -508,6 +509,7 @@
 @media (max-width: 480px) {
     .profile-page {
         padding: 1rem;
+        align-items: flex-start;
     }
 
     .profile-card {

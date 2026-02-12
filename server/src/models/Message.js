@@ -123,15 +123,26 @@ const messageSchema = new mongoose.Schema({
         default: []
     },
     // Disappearing messages support
+    // 'default' = 24hr auto-delete, 'view_once' = delete after viewed, 'off' = permanent
+    disappearMode: {
+        type: String,
+        enum: ['default', 'view_once', 'off'],
+        default: 'default'
+    },
     isEphemeral: {
         type: Boolean,
-        default: false
+        default: true
     },
     expiresAt: {
         type: Date,
-        default: null,
-        index: true // Index for efficient cleanup queries
-    }
+        default: () => new Date(Date.now() + 24 * 60 * 60 * 1000),
+        index: true
+    },
+    // Per-user deletion tracking
+    deletedFor: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }]
 }, {
     timestamps: true
 });

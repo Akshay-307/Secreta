@@ -35,6 +35,9 @@ export default function Chat() {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
     const [replyingTo, setReplyingTo] = useState(null);
+    const [searchFilter, setSearchFilter] = useState('');
+    const [lastMessages, setLastMessages] = useState({});
+    const [unreadCounts, setUnreadCounts] = useState({});
 
     // Fetch friends list
     const fetchFriends = useCallback(async () => {
@@ -62,7 +65,6 @@ export default function Chat() {
             const response = await api.get(`/messages/${friendId}`);
 
             // Decrypt all messages
-            // Optimized decryption with voice support
             const decryptedMessages = await Promise.all(response.data.map(async (msg) => {
                 try {
                     const isMine = msg.senderId !== friendId;
@@ -87,13 +89,11 @@ export default function Chat() {
                     const isPlaceholder = ciphertext === 'FILE' || ciphertext === 'VOICE' || ciphertext === '' || (ciphertext && ciphertext.length < 24);
 
                     if (msg.messageType === 'voice' && msg.fileAttachment) {
-                        // Auto-fetch audio data for voice messages
                         try {
                             const fileResponse = await api.get(`/files/${msg.fileAttachment.fileId}`, {
                                 responseType: 'arraybuffer'
                             });
 
-                            // Decrypt audio
                             const iv = Uint8Array.from(atob(msg.fileAttachment.encryptedMetadata.iv), c => c.charCodeAt(0));
                             const decryptedAudio = await decryptFile(
                                 fileResponse.data,
@@ -109,13 +109,11 @@ export default function Chat() {
                             decryptedContent = '⚠️ Voice Message Failed';
                         }
                     } else if (msg.messageType === 'image' && msg.fileAttachment) {
-                        // Auto-fetch image data
                         try {
                             const fileResponse = await api.get(`/files/${msg.fileAttachment.fileId}`, {
                                 responseType: 'arraybuffer'
                             });
 
-                            // Decrypt image
                             const iv = Uint8Array.from(atob(msg.fileAttachment.encryptedMetadata.iv), c => c.charCodeAt(0));
                             const decryptedImage = await decryptFile(
                                 fileResponse.data,
@@ -124,8 +122,6 @@ export default function Chat() {
                             );
 
                             const blob = new Blob([decryptedImage], { type: msg.fileAttachment.mimeType });
-                            // Reuse audioUrl variable for the blob URL to avoid adding new field, or better add generic 'mediaUrl'
-                            // But existing code used audioUrl. Let's add previewUrl.
                             msg.previewUrl = URL.createObjectURL(blob);
                             decryptedContent = '📷 Image';
                         } catch (err) {
@@ -157,6 +153,22 @@ export default function Chat() {
 
             setMessages(decryptedMessages);
 
+            // Update last message for this friend
+            if (decryptedMessages.length > 0) {
+                const lastMsg = decryptedMessages[decryptedMessages.length - 1];
+                setLastMessages(prev => ({
+                    ...prev,
+                    [friendId]: {
+                        text: lastMsg.content?.substring(0, 40) || '',
+                        time: lastMsg.createdAt,
+                        isMine: lastMsg.senderId !== friendId
+                    }
+                }));
+            }
+
+            // Clear unread count for selected friend
+            setUnreadCounts(prev => ({ ...prev, [friendId]: 0 }));
+
             // Mark as read
             api.put(`/messages/read/${friendId}`).catch(console.error);
         } catch (error) {
@@ -182,37 +194,30 @@ export default function Chat() {
     }, [friendPublicKeys]);
 
     // Send message
-    const sendMessage = async (content) => {
+    const sendMessage = async (content, replyTo, disappearMode = 'default') => {
         if (!selectedFriend || !content.trim()) return;
 
         const socket = getSocket();
         if (!socket) return;
 
         try {
-            // Get both public keys
             const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
             const myPublicKey = await getStoredPublicKeyJwk();
 
-            // Encrypt for recipient (so they can read it)
             const encryptedForRecipient = await encryptMessage(content, recipientPublicKey);
-
-            // Encrypt for self (so we can read our own sent messages later)
             const encryptedForSender = myPublicKey
                 ? await encryptMessage(content, myPublicKey)
                 : null;
 
-            // Handle Reply
             let replyData = {};
-            if (replyingTo) {
-                const previewContent = replyingTo.content.substring(0, 50);
-
-                // Encrypt preview for recipient
+            if (replyTo) {
+                const previewContent = replyTo.content.substring(0, 50);
                 const encryptedPreview = await encryptMessage(previewContent, recipientPublicKey);
 
                 replyData = {
-                    replyTo: replyingTo._id,
+                    replyTo: replyTo._id,
                     replyPreview: {
-                        senderId: replyingTo.senderId,
+                        senderId: replyTo.senderId,
                         encryptedPreview
                     }
                 };
@@ -222,6 +227,7 @@ export default function Chat() {
                 recipientId: selectedFriend.id,
                 encryptedForRecipient,
                 encryptedForSender,
+                disappearMode,
                 ...replyData
             }, (response) => {
                 if (response.error) {
@@ -235,7 +241,16 @@ export default function Chat() {
                     content
                 }]);
 
-                // Clear reply state
+                // Update last message
+                setLastMessages(prev => ({
+                    ...prev,
+                    [selectedFriend.id]: {
+                        text: content.substring(0, 40),
+                        time: new Date().toISOString(),
+                        isMine: true
+                    }
+                }));
+
                 setReplyingTo(null);
             });
         } catch (error) {
@@ -266,6 +281,18 @@ export default function Chat() {
         }
     };
 
+    // Handle delete message
+    const handleDeleteMessage = (messageId) => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        socket.emit('delete_message', { messageId }, (response) => {
+            if (response.success) {
+                setMessages(prev => prev.filter(m => m._id !== messageId));
+            }
+        });
+    };
+
     // Handle file upload and send
     const handleSendFile = async (file) => {
         console.log('Starting file send:', file.name, file.type, file.size);
@@ -280,7 +307,6 @@ export default function Chat() {
         }
 
         try {
-            // Get keys
             console.log('Fetching public keys...');
             const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
             const myPublicKey = await getStoredPublicKeyJwk();
@@ -290,20 +316,15 @@ export default function Chat() {
                 return;
             }
 
-            // Encrypt file
             console.log('Encrypting file...');
             const encryptedData = await encryptFile(file, recipientPublicKey, myPublicKey);
             console.log('File encrypted successfully');
 
-            // Upload to server
-            // Create FormData
             const formData = new FormData();
-            // Create blob from encrypted data
             const encryptedBlob = new Blob([encryptedData.encryptedData]);
             formData.append('file', encryptedBlob, 'encrypted');
 
             console.log('Uploading file to server...');
-            // Add headers for friend verification
             const response = await api.post('/files/upload', formData, {
                 headers: {
                     'x-recipient-id': selectedFriend.id
@@ -311,19 +332,18 @@ export default function Chat() {
             });
             console.log('File uploaded, ID:', response.data.fileId);
 
-            // Send message with file attachment metadata
-            // Prepare encryption metadata
             const encryptionMetadata = {
                 ephemeralPublicKey: encryptedData.ephemeralPublicKey,
                 iv: btoa(String.fromCharCode(...encryptedData.iv)),
-                ciphertext: 'FILE' // Placeholder to satisfy server validation
+                ciphertext: 'FILE'
             };
 
             socket.emit('send_message', {
                 recipientId: selectedFriend.id,
                 messageType: file.type.startsWith('image/') ? 'image' : 'file',
                 encryptedForRecipient: encryptionMetadata,
-                encryptedForSender: encryptionMetadata, // Simulating sender copy for structure
+                encryptedForSender: encryptionMetadata,
+                disappearMode: 'default',
                 fileAttachment: {
                     fileId: response.data.fileId,
                     fileName: file.name,
@@ -355,14 +375,11 @@ export default function Chat() {
         try {
             const { blob, duration, waveformData } = voiceData;
 
-            // Get keys
             const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
             const myPublicKey = await getStoredPublicKeyJwk();
 
-            // Encrypt audio blob
             const encryptedData = await encryptFile(blob, recipientPublicKey, myPublicKey);
 
-            // Upload
             const formData = new FormData();
             const encryptedBlob = new Blob([encryptedData.encryptedData]);
             formData.append('file', encryptedBlob, 'voice.webm');
@@ -373,11 +390,10 @@ export default function Chat() {
                 }
             });
 
-            // Send message
             const encryptionMetadata = {
                 ephemeralPublicKey: encryptedData.ephemeralPublicKey,
                 iv: btoa(String.fromCharCode(...encryptedData.iv)),
-                ciphertext: 'VOICE' // Placeholder
+                ciphertext: 'VOICE'
             };
 
             socket.emit('send_message', {
@@ -387,6 +403,7 @@ export default function Chat() {
                 waveformData: waveformData,
                 encryptedForRecipient: encryptionMetadata,
                 encryptedForSender: encryptionMetadata,
+                disappearMode: 'default',
                 fileAttachment: {
                     fileId: response.data.fileId,
                     fileName: 'Voice Message',
@@ -412,12 +429,10 @@ export default function Chat() {
         try {
             const { fileId, encryptedMetadata, mimeType, fileName } = fileAttachment;
 
-            // Download encrypted blob
             const response = await api.get(`/files/${fileId}`, {
                 responseType: 'arraybuffer'
             });
 
-            // Decrypt
             const iv = Uint8Array.from(atob(encryptedMetadata.iv), c => c.charCodeAt(0));
 
             const decryptedData = await decryptFile(
@@ -426,7 +441,6 @@ export default function Chat() {
                 iv
             );
 
-            // Create download
             const blob = createDownloadBlob(decryptedData, mimeType);
             downloadFile(blob, fileName);
 
@@ -446,18 +460,15 @@ export default function Chat() {
                 let decryptedContent = '';
                 let audioUrl = null;
 
-                // Check for legacy placeholder messages
                 const ciphertext = message.encryptedForRecipient?.ciphertext || message.encrypted?.ciphertext;
                 const isPlaceholder = ciphertext === 'FILE' || ciphertext === 'VOICE' || ciphertext === '' || (ciphertext && ciphertext.length < 24);
 
                 if (message.messageType === 'voice' && message.fileAttachment) {
-                    // Auto-fetch audio data for voice messages
                     try {
                         const fileResponse = await api.get(`/files/${message.fileAttachment.fileId}`, {
                             responseType: 'arraybuffer'
                         });
 
-                        // Decrypt audio
                         const iv = Uint8Array.from(atob(message.fileAttachment.encryptedMetadata.iv), c => c.charCodeAt(0));
                         const decryptedAudio = await decryptFile(
                             fileResponse.data,
@@ -473,13 +484,11 @@ export default function Chat() {
                         decryptedContent = '⚠️ Voice Message Failed';
                     }
                 } else if (message.messageType === 'image' && message.fileAttachment) {
-                    // Auto-fetch image data
                     try {
                         const fileResponse = await api.get(`/files/${message.fileAttachment.fileId}`, {
                             responseType: 'arraybuffer'
                         });
 
-                        // Decrypt image
                         const iv = Uint8Array.from(atob(message.fileAttachment.encryptedMetadata.iv), c => c.charCodeAt(0));
                         const decryptedImage = await decryptFile(
                             fileResponse.data,
@@ -505,14 +514,22 @@ export default function Chat() {
                     const encryptedData = message.encryptedForRecipient || message.encrypted;
                     decryptedContent = await decryptMessage(encryptedData);
                 } else {
-                    // For files/voice, content is just a label/placeholder
                     decryptedContent = message.messageType === 'image' ? '📷 Image' : '📎 File';
                 }
 
                 const decryptedMessage = { ...message, content: decryptedContent, audioUrl };
 
+                // Update last message for this sender
+                setLastMessages(prev => ({
+                    ...prev,
+                    [message.senderId]: {
+                        text: decryptedContent.substring(0, 40),
+                        time: message.createdAt,
+                        isMine: false
+                    }
+                }));
+
                 setMessages(prev => {
-                    // Only add if this is for current conversation
                     if (
                         selectedFriend &&
                         (message.senderId === selectedFriend.id ||
@@ -523,10 +540,17 @@ export default function Chat() {
                     return prev;
                 });
 
-                // Update friends list to show last message indicator
+                // Update unread count if not viewing this conversation
+                if (!selectedFriend || message.senderId !== selectedFriend.id) {
+                    setUnreadCounts(prev => ({
+                        ...prev,
+                        [message.senderId]: (prev[message.senderId] || 0) + 1
+                    }));
+                }
+
+                // Update friends list
                 fetchFriends();
             } catch (error) {
-                // Suppress expected errors for legacy/broken messages
                 if (error.name === 'OperationError' || error.name === 'InvalidCharacterError') {
                     console.warn('Skipping unreadable incoming message');
                     return;
@@ -566,14 +590,14 @@ export default function Chat() {
             fetchFriends();
         };
 
-        // Reaction updated - update message reactions
+        // Reaction updated
         const handleReactionUpdated = ({ messageId, reactions }) => {
             setMessages(prev => prev.map(msg =>
                 msg._id === messageId ? { ...msg, reactions } : msg
             ));
         };
 
-        // Messages read - update read status on sender's messages
+        // Messages read
         const handleMessagesRead = ({ messageIds }) => {
             setMessages(prev => prev.map(msg =>
                 messageIds.includes(msg._id) ? { ...msg, read: true } : msg
@@ -627,6 +651,11 @@ export default function Chat() {
         navigate('/login');
     };
 
+    // Filter friends by search
+    const filteredFriends = searchFilter
+        ? friends.filter(f => f.username.toLowerCase().includes(searchFilter.toLowerCase()))
+        : friends;
+
     return (
         <div className="chat-container">
             {/* Sidebar */}
@@ -661,11 +690,27 @@ export default function Chat() {
                     </div>
                 </header>
 
+                {/* Search filter for friends */}
+                <div className="chat-search-wrapper">
+                    <div className="search-input-wrapper">
+                        <span className="search-icon">🔍</span>
+                        <input
+                            type="text"
+                            className="chat-search-input"
+                            placeholder="Search chats..."
+                            value={searchFilter}
+                            onChange={(e) => setSearchFilter(e.target.value)}
+                        />
+                    </div>
+                </div>
+
                 <ChatList
-                    friends={friends}
+                    friends={filteredFriends}
                     selectedFriend={selectedFriend}
                     onSelectFriend={setSelectedFriend}
                     onlineUsers={onlineUsers}
+                    lastMessages={lastMessages}
+                    unreadCounts={unreadCounts}
                 />
             </aside>
 
@@ -679,6 +724,7 @@ export default function Chat() {
                         onSendFile={handleSendFile}
                         onSendVoice={handleSendVoice}
                         onDownloadFile={handleDownloadFile}
+                        onDeleteMessage={handleDeleteMessage}
                         socket={getSocket()}
                         onTyping={handleTyping}
                         isTyping={typingUsers.has(selectedFriend.id)}
@@ -696,6 +742,7 @@ export default function Chat() {
                             <span className="no-chat-icon">💬</span>
                             <h2>Select a conversation</h2>
                             <p>Choose a friend from the list to start chatting</p>
+                            <p className="disappear-hint">⏳ All messages auto-delete after 24 hours</p>
                         </div>
                     </div>
                 )}
