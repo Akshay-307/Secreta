@@ -243,6 +243,7 @@ export const setupSocketHandlers = (io) => {
             const { messageIds, senderId } = data;
 
             try {
+                // Mark messages as read
                 await Message.updateMany(
                     { _id: { $in: messageIds }, recipientId: userId },
                     { read: true }
@@ -259,7 +260,42 @@ export const setupSocketHandlers = (io) => {
                     });
                 }
 
-                // Auto-delete view_once messages after being read
+                // Handle view_once messages
+                const viewOnceMessages = await Message.find({
+                    _id: { $in: messageIds },
+                    disappearMode: 'view_once'
+                });
+
+                for (const msg of viewOnceMessages) {
+                    // Add current user to viewedBy
+                    if (!msg.viewedBy) msg.viewedBy = [];
+                    if (!msg.viewedBy.includes(userId)) {
+                        msg.viewedBy.push(userId);
+                    }
+                    await msg.save();
+
+                    // Notify recipient that message should be removed from UI
+                    const recipientSockets = userSockets.get(userId);
+                    if (recipientSockets) {
+                        recipientSockets.forEach(socketId => {
+                            io.to(socketId).emit('message_viewed_once', {
+                                messageId: msg._id
+                            });
+                        });
+                    }
+
+                    // Notify sender that message was viewed
+                    const msgSenderSockets = userSockets.get(msg.senderId.toString());
+                    if (msgSenderSockets) {
+                        msgSenderSockets.forEach(socketId => {
+                            io.to(socketId).emit('message_viewed_once', {
+                                messageId: msg._id
+                            });
+                        });
+                    }
+                }
+
+                // Auto-delete view_once messages after being viewed
                 await Message.deleteMany({
                     _id: { $in: messageIds },
                     disappearMode: 'view_once'

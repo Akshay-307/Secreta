@@ -142,6 +142,11 @@ const messageSchema = new mongoose.Schema({
     deletedFor: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
+    }],
+    // Track who has viewed this message (for view-once)
+    viewedBy: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
     }]
 }, {
     timestamps: true

@@ -169,8 +169,15 @@ export default function Chat() {
             // Clear unread count for selected friend
             setUnreadCounts(prev => ({ ...prev, [friendId]: 0 }));
 
-            // Mark as read
-            api.put(`/messages/read/${friendId}`).catch(console.error);
+            // Mark as read via socket for real-time updates
+            const socket = getSocket();
+            if (socket && decryptedMessages.length > 0) {
+                const messageIds = decryptedMessages.map(m => m._id);
+                socket.emit('mark_read', {
+                    messageIds,
+                    senderId: friendId
+                });
+            }
         } catch (error) {
             console.error('Failed to fetch messages:', error);
         }
@@ -604,12 +611,18 @@ export default function Chat() {
             ));
         };
 
+        // View-once message viewed - remove from UI
+        const handleMessageViewedOnce = ({ messageId }) => {
+            setMessages(prev => prev.filter(msg => msg._id !== messageId));
+        };
+
         socket.on('new_message', handleNewMessage);
         socket.on('friend_status', handleFriendStatus);
         socket.on('user_typing', handleUserTyping);
         socket.on('friend_request_accepted', handleFriendRequestAccepted);
         socket.on('reaction_updated', handleReactionUpdated);
         socket.on('messages_read', handleMessagesRead);
+        socket.on('message_viewed_once', handleMessageViewedOnce);
 
         return () => {
             socket.off('new_message', handleNewMessage);
@@ -618,6 +631,7 @@ export default function Chat() {
             socket.off('friend_request_accepted', handleFriendRequestAccepted);
             socket.off('reaction_updated', handleReactionUpdated);
             socket.off('messages_read', handleMessagesRead);
+            socket.off('message_viewed_once', handleMessageViewedOnce);
         };
     }, [selectedFriend, fetchFriends]);
 
