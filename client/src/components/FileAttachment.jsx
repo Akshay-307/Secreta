@@ -141,15 +141,32 @@ export default function FileAttachment({ onAttach, onClose }) {
  * File Message Display Component
  * Shows attached files in message bubbles
  */
-export function FileMessage({ file, onDownload, isDownloading }) {
+/**
+ * File Message Display Component
+ * Shows attached files in message bubbles
+ */
+export function FileMessage({ file, onDownload, isDownloading, uploadProgress }) {
     const icon = getFileIcon(file.mimeType);
     const isImage = file.mimeType?.startsWith('image/');
+    const isUploading = uploadProgress !== undefined && uploadProgress < 100;
 
     if (isImage && file.previewUrl) {
         return (
             <div className="file-message-inline" onClick={onDownload}>
                 <img src={file.previewUrl} alt={file.name} className="file-image-inline" />
-                {isDownloading && (
+
+                {/* Upload Progress Overlay */}
+                {isUploading && (
+                    <div className="upload-overlay">
+                        <div className="upload-spinner" style={{
+                            background: `conic-gradient(var(--primary-color) ${uploadProgress}%, rgba(255,255,255,0.2) 0)`
+                        }} />
+                        <span className="upload-percent">{uploadProgress}%</span>
+                    </div>
+                )}
+
+                {/* Download Progress Overlay */}
+                {isDownloading && !isUploading && (
                     <div className="file-overlay">
                         <span className="loading-spinner">⏳</span>
                     </div>
@@ -164,9 +181,19 @@ export function FileMessage({ file, onDownload, isDownloading }) {
             <div className="file-message-info">
                 <span className="file-message-name">{file.name}</span>
                 <span className="file-message-size">{formatFileSize(file.size)}</span>
+                {isUploading && (
+                    <div className="upload-progress-bar-container">
+                        <div
+                            className="upload-progress-bar"
+                            style={{ width: `${uploadProgress}%` }}
+                        />
+                    </div>
+                )}
             </div>
             <div className="file-message-action">
-                {isDownloading ? (
+                {isUploading ? (
+                    <span className="upload-text">{uploadProgress}%</span>
+                ) : isDownloading ? (
                     <span className="loading-spinner">⏳</span>
                 ) : (
                     <span className="download-icon">⬇️</span>

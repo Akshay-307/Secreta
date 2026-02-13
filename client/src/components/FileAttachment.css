@@ -251,3 +251,59 @@
         transform: rotate(360deg);
     }
 }
+
+/* Upload Progress Styles */
+.file-message-inline {
+    position: relative;
+    display: inline-block;
+}
+
+.upload-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    border-radius: 8px;
+}
+
+.upload-spinner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    /* background set inline */
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff 0);
+    mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff 0);
+}
+
+.upload-percent {
+    position: absolute;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.upload-progress-bar-container {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    margin-top: 4px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.upload-progress-bar {
+    height: 100%;
+    background: var(--primary-color, #a78bfa);
+    transition: width 0.2s ease;
+}
+
+.upload-text {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}

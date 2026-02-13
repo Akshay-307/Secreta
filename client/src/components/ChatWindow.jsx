@@ -11,6 +11,7 @@ import WallpaperPicker from './WallpaperPicker';
 import FileAttachment from './FileAttachment';
 import VoiceRecorder from './VoiceRecorder';
 import CallScreen from './CallScreen';
+import MediaPreview from './MediaPreview';
 import { getWallpaper, PRESET_WALLPAPERS } from '../utils/wallpaperManager';
 import './ChatWindow.css';
 
@@ -87,6 +88,7 @@ export default function ChatWindow({
     const [isRecordingVoice, setIsRecordingVoice] = useState(false);
     const [activeCall, setActiveCall] = useState(null);
     const [disappearMode, setDisappearMode] = useState('default'); // 'default' | 'view_once' | 'off'
+    const [previewFile, setPreviewFile] = useState(null);
     const messagesEndRef = useRef(null);
 
     // Load wallpaper for this chat
@@ -168,9 +170,22 @@ export default function ChatWindow({
     };
 
     const handleFileAttach = (file) => {
-        if (onSendFile) {
-            onSendFile(file);
+        // If it's an image or video, show preview first
+        if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+            setPreviewFile(file);
+        } else {
+            // Document/other file - send directly
+            if (onSendFile) {
+                onSendFile(file);
+            }
         }
+    };
+
+    const handleConfirmSendFile = (file, caption) => {
+        if (onSendFile) {
+            onSendFile(file, caption);
+        }
+        setPreviewFile(null);
     };
 
     const handleVoiceRecord = (voiceData) => {
@@ -427,6 +442,15 @@ export default function ChatWindow({
                     isVideo={activeCall.isVideo}
                     offer={activeCall.offer}
                     onEnd={() => setActiveCall(null)}
+                />
+            )}
+
+            {/* Media Preview Modal */}
+            {previewFile && (
+                <MediaPreview
+                    file={previewFile}
+                    onClose={() => setPreviewFile(null)}
+                    onSend={handleConfirmSendFile}
                 />
             )}
         </div>

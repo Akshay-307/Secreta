@@ -137,7 +137,18 @@ export default function Chat() {
                     } else if (msg.messageType === 'text') {
                         decryptedContent = await decryptMessage(encryptedData);
                     } else {
-                        decryptedContent = msg.messageType === 'image' ? '📷 Image' : '📎 File';
+                        // Image or File
+                        // Try to decrypt caption if not a placeholder
+                        if (!isPlaceholder) {
+                            try {
+                                const caption = await decryptMessage(encryptedData);
+                                decryptedContent = caption || (msg.messageType === 'image' ? '📷 Image' : '📎 File');
+                            } catch (e) {
+                                decryptedContent = msg.messageType === 'image' ? '📷 Image' : '📎 File';
+                            }
+                        } else {
+                            decryptedContent = msg.messageType === 'image' ? '📷 Image' : '📎 File';
+                        }
                     }
 
                     return { ...msg, content: decryptedContent, audioUrl };
@@ -301,7 +312,7 @@ export default function Chat() {
     };
 
     // Handle file upload and send
-    const handleSendFile = async (file) => {
+    const handleSendFile = async (file, caption = '') => {
         console.log('Starting file send:', file.name, file.type, file.size);
         if (!selectedFriend) {
             console.error('No friend selected');
@@ -313,6 +324,28 @@ export default function Chat() {
             return;
         }
 
+        // Create temporary message for progress
+        const tempId = 'temp-' + Date.now();
+        const tempMessage = {
+            _id: tempId,
+            senderId: user.id,
+            recipientId: selectedFriend.id,
+            messageType: file.type.startsWith('image/') ? 'image' : 'file',
+            content: caption,
+            createdAt: new Date().toISOString(),
+            isMine: true,
+            uploadProgress: 0,
+            fileAttachment: {
+                fileName: file.name,
+                fileSize: file.size,
+                mimeType: file.type
+            },
+            // Create a preview URL immediately for images
+            previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+        };
+
+        setMessages(prev => [...prev, tempMessage]);
+
         try {
             console.log('Fetching public keys...');
             const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
@@ -320,12 +353,32 @@ export default function Chat() {
 
             if (!recipientPublicKey) {
                 console.error('Recipient public key not found');
+                setMessages(prev => prev.filter(m => m._id !== tempId));
                 return;
             }
 
             console.log('Encrypting file...');
+            // Update progress for encryption phase
+            setMessages(prev => prev.map(m =>
+                m._id === tempId ? { ...m, uploadProgress: 5 } : m
+            ));
+
             const encryptedData = await encryptFile(file, recipientPublicKey, myPublicKey);
             console.log('File encrypted successfully');
+
+            // Encrypt caption if present
+            let encryptedForRecipient = null;
+            let encryptedForSender = null;
+
+            if (caption) {
+                encryptedForRecipient = await encryptMessage(caption, recipientPublicKey);
+                encryptedForSender = myPublicKey ? await encryptMessage(caption, myPublicKey) : null;
+            } else {
+                // If no caption, we use a placeholder for the text content part
+                const placeholder = file.type.startsWith('image/') ? '📷 Image' : '📎 File';
+                // We don't actually need to encrypt placeholder, the UI handles it if content is empty/missing
+                // But let's keep consistency with existing logic if needed
+            }
 
             const formData = new FormData();
             const encryptedBlob = new Blob([encryptedData.encryptedData]);
@@ -335,6 +388,15 @@ export default function Chat() {
             const response = await api.post('/files/upload', formData, {
                 headers: {
                     'x-recipient-id': selectedFriend.id
+                },
+                onUploadProgress: (progressEvent) => {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    // Map 0-100 upload to 10-90 total progress (leaving room for encryption and socket send)
+                    const normalizedProgress = 10 + Math.round(percentCompleted * 0.8);
+
+                    setMessages(prev => prev.map(m =>
+                        m._id === tempId ? { ...m, uploadProgress: normalizedProgress } : m
+                    ));
                 }
             });
             console.log('File uploaded, ID:', response.data.fileId);
@@ -342,14 +404,18 @@ export default function Chat() {
             const encryptionMetadata = {
                 ephemeralPublicKey: encryptedData.ephemeralPublicKey,
                 iv: btoa(String.fromCharCode(...encryptedData.iv)),
-                ciphertext: 'FILE'
+                ciphertext: 'FILE' // Placeholder
             };
 
-            socket.emit('send_message', {
+            // Prepare the final payload
+            // If we have a caption, we use that for the main encrypted content
+            // If not, we use the file placeholder logic
+            const msgPayload = {
                 recipientId: selectedFriend.id,
                 messageType: file.type.startsWith('image/') ? 'image' : 'file',
-                encryptedForRecipient: encryptionMetadata,
-                encryptedForSender: encryptionMetadata,
+                // Use caption encryption if available, otherwise use file metadata as placeholder
+                encryptedForRecipient: encryptedForRecipient || encryptionMetadata,
+                encryptedForSender: encryptedForSender || encryptionMetadata,
                 disappearMode: 'default',
                 fileAttachment: {
                     fileId: response.data.fileId,
@@ -358,18 +424,42 @@ export default function Chat() {
                     mimeType: file.type,
                     encryptedMetadata: encryptionMetadata
                 }
-            }, (response) => {
+            };
+
+            socket.emit('send_message', msgPayload, (response) => {
                 if (response.error) {
                     console.error('Send file failed:', response.error);
+                    setMessages(prev => prev.map(m =>
+                        m._id === tempId ? { ...m, error: true, uploadProgress: 0 } : m
+                    ));
                     return;
                 }
                 console.log('Message sent successfully:', response.message);
-                setMessages(prev => [...prev, response.message]);
+
+                // Replace temp message with real one
+                setMessages(prev => prev.map(m =>
+                    m._id === tempId ? {
+                        ...response.message,
+                        content: caption || (file.type.startsWith('image/') ? '📷 Image' : '📎 File'),
+                        previewUrl: tempMessage.previewUrl // Keep the local preview
+                    } : m
+                ));
+
+                // Update last message
+                setLastMessages(prev => ({
+                    ...prev,
+                    [selectedFriend.id]: {
+                        text: caption || (file.type.startsWith('image/') ? '📷 Image' : '📎 File'),
+                        time: new Date().toISOString(),
+                        isMine: true
+                    }
+                }));
             });
 
         } catch (error) {
             console.error('Failed to send file:', error);
             alert(`File upload failed: ${error.message || 'Unknown error'}`);
+            setMessages(prev => prev.filter(m => m._id !== tempId));
         }
     };
 
@@ -505,10 +595,33 @@ export default function Chat() {
 
                         const blob = new Blob([decryptedImage], { type: message.fileAttachment.mimeType });
                         message.previewUrl = URL.createObjectURL(blob);
-                        decryptedContent = '📷 Image';
+
+                        // Try to decrypt caption
+                        if (!isPlaceholder) {
+                            try {
+                                const caption = await decryptMessage(message.encryptedForRecipient || message.encrypted);
+                                decryptedContent = caption || '📷 Image';
+                            } catch (e) {
+                                decryptedContent = '📷 Image';
+                            }
+                        } else {
+                            decryptedContent = '📷 Image';
+                        }
                     } catch (err) {
                         console.error('Failed to load image:', err);
                         decryptedContent = '⚠️ Image Failed';
+                    }
+                } else if (message.messageType === 'file') {
+                    // Try to decrypt caption
+                    if (!isPlaceholder) {
+                        try {
+                            const caption = await decryptMessage(message.encryptedForRecipient || message.encrypted);
+                            decryptedContent = caption || '📎 File';
+                        } catch (e) {
+                            decryptedContent = '📎 File';
+                        }
+                    } else {
+                        decryptedContent = '📎 File';
                     }
                 } else if (!message.messageType) {
                     if (isPlaceholder) {

@@ -479,3 +479,11 @@
         opacity: 1;
     }
 }
+
+/* Message Caption */
+.message-caption {
+    margin-top: 0.5rem;
+    font-size: 0.9375rem;
+    line-height: 1.4;
+    padding-top: 0.25rem;
+}

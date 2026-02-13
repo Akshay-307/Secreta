@@ -170,18 +170,29 @@ export default function MessageBubble({
         switch (msgType) {
             case 'file':
             case 'image':
-                return message.fileAttachment ? (
-                    <FileMessage
-                        file={{
-                            name: message.fileAttachment.fileName,
-                            size: message.fileAttachment.fileSize,
-                            mimeType: message.fileAttachment.mimeType,
-                            previewUrl: message.previewUrl
-                        }}
-                        onDownload={handleFileDownload}
-                        isDownloading={isDownloading}
-                    />
-                ) : null;
+                return (
+                    <div className="message-media-container">
+                        {message.fileAttachment && (
+                            <FileMessage
+                                file={{
+                                    name: message.fileAttachment.fileName,
+                                    size: message.fileAttachment.fileSize,
+                                    mimeType: message.fileAttachment.mimeType,
+                                    previewUrl: message.previewUrl
+                                }}
+                                onDownload={handleFileDownload}
+                                isDownloading={isDownloading}
+                                uploadProgress={message.uploadProgress}
+                            />
+                        )}
+                        {/* Caption */}
+                        {message.content && !message.content.startsWith('📷') && !message.content.startsWith('📎') && (
+                            <div className="message-caption">
+                                {renderContent(message.content)}
+                            </div>
+                        )}
+                    </div>
+                );
 
             case 'voice':
                 return (
