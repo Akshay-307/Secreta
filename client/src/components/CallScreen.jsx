@@ -33,7 +33,37 @@ export default function CallScreen({
     // ... (rest of refs)
 
     const cleanup = useCallback(() => {
-        // ... (cleanup logic)
+        console.log('Cleaning up call resources...');
+
+        // Stop all local tracks (Release camera/mic)
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => {
+                track.stop();
+                console.log(`Stopped local track: ${track.kind}`);
+            });
+            localStreamRef.current = null;
+        }
+
+        // Close peer connection
+        if (peerConnectionRef.current) {
+            peerConnectionRef.current.close();
+            peerConnectionRef.current = null;
+            console.log('Closed peer connection');
+        }
+
+        // Clear refs
+        localVideoRef.current = null;
+        remoteVideoRef.current = null;
+        remoteAudioRef.current = null;
+        remoteStreamRef.current = null;
+
+        // Clear interval
+        if (durationIntervalRef.current) {
+            clearInterval(durationIntervalRef.current);
+            durationIntervalRef.current = null;
+        }
+
+        iceCandidatesBuffer.current = [];
     }, []);
 
     const endCall = useCallback(() => {
