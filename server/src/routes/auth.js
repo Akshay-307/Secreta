@@ -159,17 +159,22 @@ router.get('/verify/:token', async (req, res) => {
  */
 router.post('/resend-verification', async (req, res) => {
     try {
-        const { email } = req.body;
+        const { email, username } = req.body;
 
-        if (!email) {
-            return res.status(400).json({ error: 'Email is required' });
+        if (!email && !username) {
+            return res.status(400).json({ error: 'Email or username is required' });
         }
 
-        const user = await User.findOne({ email: email.toLowerCase() });
+        let user;
+        if (email) {
+            user = await User.findOne({ email: email.toLowerCase() });
+        } else {
+            user = await User.findOne({ username });
+        }
 
         if (!user) {
-            // Don't reveal if email exists
-            return res.json({ message: 'If the email exists, a verification link has been sent.' });
+            // Don't reveal if user exists
+            return res.json({ message: 'If the account exists, a verification link has been sent.' });
         }
 
         if (user.isVerified) {
@@ -196,19 +201,19 @@ router.post('/resend-verification', async (req, res) => {
 /**
  * POST /api/auth/login
  * 
- * Authenticate user with email and password
+ * Authenticate user with username and password
  * Only allows verified users to log in
  */
 router.post('/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { username, password } = req.body;
 
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password are required' });
         }
 
-        // Find user by email
-        const user = await User.findOne({ email: email.toLowerCase() });
+        // Find user by username
+        const user = await User.findOne({ username });
         if (!user) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -224,7 +229,7 @@ router.post('/login', async (req, res) => {
             return res.status(403).json({
                 error: 'Please verify your email before logging in',
                 requiresVerification: true,
-                email: user.email
+                email: user.email // Send back email for potential resend logic if needed
             });
         }
 

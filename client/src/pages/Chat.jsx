@@ -218,6 +218,39 @@ export default function Chat() {
         const socket = getSocket();
         if (!socket) return;
 
+        // Optimistic UI: Create temp message
+        const tempId = 'temp-' + Date.now();
+        const tempMessage = {
+            _id: tempId,
+            senderId: user.id,
+            recipientId: selectedFriend.id,
+            content,
+            createdAt: new Date().toISOString(),
+            isMine: true,
+            status: 'sending', // Add status field
+            replyTo: replyTo ? {
+                _id: replyTo._id,
+                content: replyTo.content,
+                senderId: replyTo.senderId
+            } : null
+        };
+
+        // Add to state immediately
+        setMessages(prev => [...prev, tempMessage]);
+
+        // Update last message immediately
+        setLastMessages(prev => ({
+            ...prev,
+            [selectedFriend.id]: {
+                text: content.substring(0, 40),
+                time: new Date().toISOString(),
+                isMine: true
+            }
+        }));
+
+        setReplyingTo(null);
+        onTyping(false); // Stop typing immediately
+
         try {
             const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
             const myPublicKey = await getStoredPublicKeyJwk();
@@ -250,29 +283,28 @@ export default function Chat() {
             }, (response) => {
                 if (response.error) {
                     console.error('Send failed:', response.error);
+                    // Mark as failed in UI
+                    setMessages(prev => prev.map(m =>
+                        m._id === tempId ? { ...m, status: 'failed', error: true } : m
+                    ));
                     return;
                 }
 
-                // Add message to local state
-                setMessages(prev => [...prev, {
-                    ...response.message,
-                    content
-                }]);
-
-                // Update last message
-                setLastMessages(prev => ({
-                    ...prev,
-                    [selectedFriend.id]: {
-                        text: content.substring(0, 40),
-                        time: new Date().toISOString(),
-                        isMine: true
-                    }
-                }));
-
-                setReplyingTo(null);
+                // Replace temp message with real one
+                setMessages(prev => prev.map(m =>
+                    m._id === tempId ? {
+                        ...response.message,
+                        content, // Keep original content
+                        status: 'sent'
+                    } : m
+                ));
             });
         } catch (error) {
             console.error('Failed to send message:', error);
+            // Mark as failed in UI
+            setMessages(prev => prev.map(m =>
+                m._id === tempId ? { ...m, status: 'failed', error: true } : m
+            ));
         }
     };
 
