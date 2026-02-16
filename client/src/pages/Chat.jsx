@@ -249,7 +249,7 @@ export default function Chat() {
         }));
 
         setReplyingTo(null);
-        onTyping(false); // Stop typing immediately
+        handleTyping(false); // Stop typing immediately
 
         try {
             const recipientPublicKey = await getFriendPublicKey(selectedFriend.id);
