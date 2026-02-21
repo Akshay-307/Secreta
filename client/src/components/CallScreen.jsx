@@ -8,6 +8,13 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPeerConnection } from '../utils/webrtcConfig';
 import './CallScreen.css';
 
+// Helper to format call duration (seconds -> mm:ss)
+const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
 export default function CallScreen({
     socket,
     friend,
@@ -71,6 +78,53 @@ export default function CallScreen({
         cleanup();
         onEnd();
     }, [socket, friend.id, cleanup, onEnd]);
+
+    const processBufferedCandidates = useCallback(async () => {
+        if (!peerConnectionRef.current || !peerConnectionRef.current.remoteDescription) return;
+
+        console.log(`Processing ${iceCandidatesBuffer.current.length} buffered ICE candidates`);
+        for (const candidate of iceCandidatesBuffer.current) {
+            try {
+                await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+                console.error('Error adding buffered ICE candidate', e);
+            }
+        }
+        iceCandidatesBuffer.current = [];
+    }, []);
+
+    const handleOffer = useCallback(async (offer) => {
+        try {
+            if (!peerConnectionRef.current) return;
+            console.log('Handling offer...');
+            await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(offer));
+
+            const answer = await peerConnectionRef.current.createAnswer();
+            await peerConnectionRef.current.setLocalDescription(answer);
+
+            socket.emit('call_answer', {
+                recipientId: friend.id,
+                answer: peerConnectionRef.current.localDescription
+            });
+
+            await processBufferedCandidates();
+        } catch (error) {
+            console.error('Error handling offer:', error);
+            setCallStatus('error');
+        }
+    }, [friend.id, socket, processBufferedCandidates]);
+
+    const handleAnswer = useCallback(async (answer) => {
+        try {
+            if (!peerConnectionRef.current) return;
+            console.log('Handling answer...');
+            await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+            await processBufferedCandidates();
+        } catch (error) {
+            console.error('Error handling answer:', error);
+            setCallStatus('error');
+        }
+    }, [processBufferedCandidates]);
 
     const initializeCall = useCallback(async () => {
         try {
@@ -198,52 +252,6 @@ export default function CallScreen({
         }
     };
 
-    const processBufferedCandidates = useCallback(async () => {
-        if (!peerConnectionRef.current || !peerConnectionRef.current.remoteDescription) return;
-
-        console.log(`Processing ${iceCandidatesBuffer.current.length} buffered ICE candidates`);
-        for (const candidate of iceCandidatesBuffer.current) {
-            try {
-                await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (e) {
-                console.error('Error adding buffered ICE candidate', e);
-            }
-        }
-        iceCandidatesBuffer.current = [];
-    }, []);
-
-    const handleOffer = useCallback(async (offer) => {
-        try {
-            if (!peerConnectionRef.current) return;
-            console.log('Handling offer...');
-            await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(offer));
-
-            const answer = await peerConnectionRef.current.createAnswer();
-            await peerConnectionRef.current.setLocalDescription(answer);
-
-            socket.emit('call_answer', {
-                recipientId: friend.id,
-                answer: peerConnectionRef.current.localDescription
-            });
-
-            await processBufferedCandidates();
-        } catch (error) {
-            console.error('Error handling offer:', error);
-            setCallStatus('error');
-        }
-    }, [friend.id, socket, processBufferedCandidates]);
-
-    const handleAnswer = useCallback(async (answer) => {
-        try {
-            if (!peerConnectionRef.current) return;
-            console.log('Handling answer...');
-            await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-            await processBufferedCandidates();
-        } catch (error) {
-            console.error('Error handling answer:', error);
-            setCallStatus('error');
-        }
-    }, [processBufferedCandidates]);
 
     useEffect(() => {
         if (!socket) return;
