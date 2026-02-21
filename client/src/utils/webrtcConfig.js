@@ -26,8 +26,10 @@ export async function getIceServers() {
     if (apiKey && domain) {
         try {
             console.log('📡 Fetching TURN servers from Metered...');
+            // Robust domain handling: remove suffix if already present in env var
+            const machineName = domain.replace('.metered.live', '');
             const response = await fetch(
-                `https://${domain}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
+                `https://${machineName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
             );
             const iceServers = await response.json();
             cachedIceServers = iceServers;
