@@ -12,6 +12,12 @@ const STUN_SERVERS = [
     'stun:stun2.l.google.com:19302',
     'stun:stun3.l.google.com:19302',
     'stun:stun4.l.google.com:19302',
+    'stun:stun.services.mozilla.com',
+    'stun:stun.rixos.com',
+    'stun:stun.voiparound.com',
+    'stun:stun.voipbuster.com',
+    'stun:stun.voipstunt.com',
+    'stun:stun.voxgratia.org',
 ];
 
 /**
