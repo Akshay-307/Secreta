@@ -5,32 +5,46 @@
  * No third-party accounts or API keys required.
  */
 
-// Free public STUN servers
 const STUN_SERVERS = [
     'stun:stun.l.google.com:19302',
-    'stun:stun1.l.google.com:19302',
-    'stun:stun2.l.google.com:19302',
-    'stun:stun3.l.google.com:19302',
-    'stun:stun4.l.google.com:19302',
     'stun:stun.services.mozilla.com',
-    'stun:stun.rixos.com',
-    'stun:stun.voiparound.com',
-    'stun:stun.voipbuster.com',
-    'stun:stun.voipstunt.com',
-    'stun:stun.voxgratia.org',
 ];
+
+let cachedIceServers = null;
 
 /**
  * Get ICE servers configuration
- * Returns static STUN servers for free P2P calling
+ * Fetches TURN credentials from Metered if available, 
+ * otherwise falls back to public STUN servers.
  */
 export async function getIceServers() {
-    console.log('✓ Using free public STUN servers');
-    return [
+    if (cachedIceServers) return cachedIceServers;
+
+    const apiKey = import.meta.env.VITE_METERED_API_KEY;
+    const domain = import.meta.env.VITE_METERED_DOMAIN;
+
+    if (apiKey && domain) {
+        try {
+            console.log('📡 Fetching TURN servers from Metered...');
+            const response = await fetch(
+                `https://${domain}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
+            );
+            const iceServers = await response.json();
+            cachedIceServers = iceServers;
+            console.log('✓ Successfully loaded Metered TURN servers');
+            return iceServers;
+        } catch (error) {
+            console.error('✗ Failed to fetch Metered TURN servers:', error);
+        }
+    }
+
+    console.log('⚠️ Falling back to public STUN servers');
+    cachedIceServers = [
         {
             urls: STUN_SERVERS
         }
     ];
+    return cachedIceServers;
 }
 
 /**

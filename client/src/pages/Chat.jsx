@@ -151,7 +151,29 @@ export default function Chat() {
                         }
                     }
 
-                    return { ...msg, content: decryptedContent, audioUrl };
+                    // Decrypt reply preview if exists
+                    let replyPreview = null;
+                    if (msg.replyPreview) {
+                        try {
+                            const isReplyByMe = msg.replyPreview.senderId === user.id;
+                            const replyEncryptedData = (msg.senderId === user.id)
+                                ? (msg.replyPreview.encryptedPreviewForSender || msg.replyPreview.encryptedPreview)
+                                : (msg.replyPreview.encryptedPreview);
+
+                            if (replyEncryptedData) {
+                                const decryptedPreview = await decryptMessage(replyEncryptedData);
+                                replyPreview = {
+                                    ...msg.replyPreview,
+                                    content: decryptedPreview
+                                };
+                            }
+                        } catch (e) {
+                            console.error('Failed to decrypt reply preview:', e);
+                            replyPreview = { ...msg.replyPreview, content: 'Message' };
+                        }
+                    }
+
+                    return { ...msg, content: decryptedContent, audioUrl, replyPreview };
                 } catch (error) {
                     if (error.name === 'OperationError' || error.name === 'InvalidCharacterError') {
                         return { ...msg, content: '🔒 Unreadable' };
@@ -228,11 +250,11 @@ export default function Chat() {
             createdAt: new Date().toISOString(),
             isMine: true,
             status: 'sending', // Add status field
-            replyTo: replyTo ? {
-                _id: replyTo._id,
-                content: replyTo.content,
-                senderId: replyTo.senderId
-            } : null
+            replyPreview: replyTo ? {
+                senderId: replyTo.senderId,
+                content: replyTo.content
+            } : null,
+            replyTo: replyTo ? replyTo._id : null
         };
 
         // Add to state immediately
@@ -263,13 +285,17 @@ export default function Chat() {
             let replyData = {};
             if (replyTo) {
                 const previewContent = replyTo.content.substring(0, 50);
-                const encryptedPreview = await encryptMessage(previewContent, recipientPublicKey);
+                const encryptedPreviewForRecipient = await encryptMessage(previewContent, recipientPublicKey);
+                const encryptedPreviewForSender = myPublicKey
+                    ? await encryptMessage(previewContent, myPublicKey)
+                    : null;
 
                 replyData = {
                     replyTo: replyTo._id,
                     replyPreview: {
                         senderId: replyTo.senderId,
-                        encryptedPreview
+                        encryptedPreview: encryptedPreviewForRecipient,
+                        encryptedPreviewForSender: encryptedPreviewForSender
                     }
                 };
             }
@@ -669,7 +695,26 @@ export default function Chat() {
                     decryptedContent = message.messageType === 'image' ? '📷 Image' : '📎 File';
                 }
 
-                const decryptedMessage = { ...message, content: decryptedContent, audioUrl };
+                // Decrypt reply preview if exists
+                let replyPreview = null;
+                if (message.replyPreview) {
+                    try {
+                        const replyEncryptedData = message.replyPreview.encryptedPreview;
+
+                        if (replyEncryptedData) {
+                            const decryptedPreview = await decryptMessage(replyEncryptedData);
+                            replyPreview = {
+                                ...message.replyPreview,
+                                content: decryptedPreview
+                            };
+                        }
+                    } catch (e) {
+                        console.error('Failed to decrypt incoming reply preview:', e);
+                        replyPreview = { ...message.replyPreview, content: 'Message' };
+                    }
+                }
+
+                const decryptedMessage = { ...message, content: decryptedContent, audioUrl, replyPreview };
 
                 // Update last message for this sender
                 setLastMessages(prev => ({
