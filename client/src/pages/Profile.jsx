@@ -348,7 +348,7 @@ export default function Profile() {
                         Clear All Data & Keys
                     </button>
                 </div>
-                <div className="profile-version">v1.2</div>
+                <div className="profile-version">v1.4</div>
             </div>
 
             {/* Blocked Users Modal */}
